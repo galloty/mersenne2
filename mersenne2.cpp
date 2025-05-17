@@ -59,8 +59,8 @@ public:
 
 	Z61 sqr() const { return Z61(_mul(_n, _n)); }
 
-	Z61 lshift(const uint8_t s) const { return (s != 0) ? Z61(_lshift(_n, s)) : *this; }
-	Z61 rshift(const uint8_t s) const { return (s != 0) ? Z61(_lshift(_n, 61 - s)) : *this; }
+	Z61 lshift(const uint8_t s) const { const uint8_t s61 = s % 61; return (s61 != 0) ? Z61(_lshift(_n, s61)) : *this; }
+	Z61 rshift(const uint8_t s) const { const uint8_t s61 = s % 61; return (s61 != 0) ? Z61(_lshift(_n, 61 - s61)) : *this; }
 
 	Z61 pow(const uint64_t e) const
 	{
@@ -197,55 +197,104 @@ private:
 
 	// Bruun's recursive polynomial factorization
 	// See G. Bruun, "z-transform DFT filters and FFT's," in IEEE Transactions on Acoustics, Speech, and Signal Processing, vol. 26, no. 1, pp. 56-63, February 1978.
-	void forward() const
+
+	/*void forward2(const size_t m, const size_t s) const
 	{
 		GF61 * const z = _z;
 		const GF61 * const w = _w;
-		const uint8_t * const w_ib = _w_ib;
 
-		// IBDWT: weighted digits
-		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k) z[k] = z[k].lshift(w_ib[2 * k + 0], w_ib[2 * k + 1]);
-
-		for (size_t m = _n / 4, s = 1; m >= 1; m /= 2, s *= 2)
+		for (size_t j = 0; j < s; ++j)
 		{
-			for (size_t j = 0; j < s; ++j)
+			const GF61 wj = w[s + j];
+			for (size_t i = 0; i < m; ++i)
 			{
-				const GF61 wj = w[s + j];
-				for (size_t i = 0; i < m; ++i)
-				{
-					const size_t k = 2 * m * j + i;
-					const GF61 u0 = z[k + 0 * m], u1 = z[k + 1 * m].mul(wj);
-					z[k + 0 * m] = u0 + u1;
-					z[k + 1 * m] = u0 - u1;
-				}
+				const size_t k = 2 * m * j + i;
+				const GF61 u0 = z[k + 0 * m], u1 = z[k + 1 * m].mul(wj);
+				z[k + 0 * m] = u0 + u1;
+				z[k + 1 * m] = u0 - u1;
+			}
+		}
+	}*/
+
+	void forward4(const size_t m, const size_t s) const
+	{
+		GF61 * const z = _z;
+		const GF61 * const w = _w;
+		const GF61 * const wr4 = &_w[_n / 2];
+
+		for (size_t j = 0; j < s; ++j)
+		{
+			const GF61 w1 = w[s + j], w2 = w[2 * (s + j)], w3 = wr4[s + j];
+
+			for (size_t i = 0; i < m; ++i)
+			{
+				const size_t k = 4 * m * j + i;
+				const GF61 u0 = z[k + 0 * m], u1 = z[k + 1 * m].mul(w2), u2 = z[k + 2 * m].mul(w1), u3 = z[k + 3 * m].mul(w3);
+				const GF61 v0 = u0 + u2, v1 = u1 + u3, v2 = u0 - u2, v3 = u1 - u3;
+				z[k + 0 * m] = v0 + v1; z[k + 1 * m] = v0 - v1;
+				z[k + 2 * m] = v2.addi(v3); z[k + 3 * m] = v2.subi(v3);
 			}
 		}
 	}
 
 	// Inverse transform of Bruun's method
-	void backward() const
+
+	/*void backward2(const size_t m, const size_t s) const
 	{
 		GF61 * const z = _z;
 		const GF61 * const w = _w;
-		const uint8_t * const w_ib = _w_ib;
 
-		for (size_t m = 1, s = _n / 4; s >= 1; m *= 2, s /= 2)
+		for (size_t j = 0; j < s; ++j)
 		{
-			for (size_t j = 0; j < s; ++j)
+			const GF61 wj = w[s + j];
+			for (size_t i = 0; i < m; ++i)
 			{
-				const GF61 wj = w[s + j];
-				for (size_t i = 0; i < m; ++i)
-				{
-					const size_t k = 2 * m * j + i;
-					const GF61 u0 = z[k + 0 * m], u1 = z[k + 1 * m];
-					z[k + 0 * m] = u0 + u1;
-					z[k + 1 * m] = (u0 - u1).mulconj(wj);
-				}
+				const size_t k = 2 * m * j + i;
+				const GF61 u0 = z[k + 0 * m], u1 = z[k + 1 * m];
+				z[k + 0 * m] = u0 + u1;
+				z[k + 1 * m] = (u0 - u1).mulconj(wj);
 			}
 		}
+	}*/
 
-		// IBDWT: restore the unweighted digits
-		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k) z[k] = z[k].rshift(w_ib[2 * k + 0], w_ib[2 * k + 1]);
+	void backward4(const size_t m, const size_t s) const
+	{
+		GF61 * const z = _z;
+		const GF61 * const w = _w;
+		const GF61 * const wr4 = &_w[_n / 2];
+
+		for (size_t j = 0; j < s; ++j)
+		{
+			const GF61 w1 = w[s + j], w2 = w[2 * (s + j)], w3 = wr4[s + j];
+
+			for (size_t i = 0; i < m; ++i)
+			{
+				const size_t k = 4 * m * j + i;
+				const GF61 u0 = z[k + 0 * m], u1 = z[k + 1 * m], u2 = z[k + 2 * m], u3 = z[k + 3 * m];
+				const GF61 v0 = u0 + u1, v1 = u0 - u1, v2 = u2 + u3, v3 = u3 - u2;
+				z[k + 0 * m] = v0 + v2; z[k + 2 * m] = (v0 - v2).mulconj(w1);
+				z[k + 1 * m] = v1.addi(v3).mulconj(w2); z[k + 3 * m] = v1.subi(v3).mulconj(w3);
+			}
+		}
+	}
+
+	// IBDWT: weighted digits
+	void weight() const
+	{
+		GF61 * const z = _z;
+		const uint8_t * const w_ib = _w_ib;
+
+		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k) z[k] = z[k].lshift(w_ib[2 * k + 0], w_ib[2 * k + 1]);
+	}
+
+	// IBDWT: restore the unweighted digits. sqr and backward transform must be divided by 4n
+	void unweight_norm() const
+	{
+		const uint8_t ln = _ln;
+		GF61 * const z = _z;
+		const uint8_t * const w_ib = _w_ib;
+
+		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k) z[k] = z[k].rshift(w_ib[2 * k + 0] + ln + 2, w_ib[2 * k + 1] + ln + 2);
 	}
 
 	// Input of the transform is 'real' (if alpha is the symbolic square root of p - 1 and the elements of GF(p^2) are a + b*alpha then b = 0).
@@ -257,7 +306,7 @@ private:
 	{
 		const size_t n_2 = _n / 2;
 		GF61 * const z = _z;
-		const GF61 * const w = _w;
+		const GF61 * const w = &_w[_n];
 
 		const GF61 Z0 = z[0] + z[0];
 		const Z61 X0 = Z0.s0() + Z0.s1(), Xm0 = Z0.s0() - Z0.s1();
@@ -270,7 +319,7 @@ private:
 
 		for (size_t k = 2; k < n_2; k += 2)
 		{
-			const GF61 wk = w[n_2 + k / 2];
+			const GF61 wk = w[k / 2];
 
 			// const size_t j = bitrev(k, n_2), mk = bitrev(n_2 - j, n_2);
 			const size_t mk = (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1;
@@ -280,31 +329,54 @@ private:
 			const GF61 Zk = Zek.subi(Zok), Zmk = Zek.addi(Zok);
 
 			const GF61 Zk2 = Zk.sqr(), Zmk2 = Zmk.sqr();
-			const GF61 Zek2 = Zk2 + Zmk2, Zok2 = (Zk2 - Zmk2).mulconj(wk);
 
-			z[k] = Zek2.addi(Zok2);
-			z[mk] = Zek2.subi_conj(Zok2);
+			const GF61 Zek2 = Zk2 + Zmk2, Zok2 = (Zk2 - Zmk2).mulconj(wk);
+			const GF61 zk2 =  Zek2.addi(Zok2), zmk2 = Zek2.subi_conj(Zok2);
+
+			z[k] = zk2; z[mk] = zmk2;
+		}
+	}
+
+	// forward2, sqr, backward2
+	void sqr2() const
+	{
+		const size_t n_4 = _n / 4;
+		GF61 * const z = _z;
+		const GF61 * const w = _w;
+
+		for (size_t j = 0; j < n_4; ++j)
+		{
+			const GF61 u0 = z[2 * j + 0], u1 = z[2 * j + 1].mul(w[n_4 + j]);
+			z[2 * j + 0] = u0 + u1;
+			z[2 * j + 1] = u0 - u1;
+		}
+
+		sqr();
+
+		for (size_t j = 0; j < n_4; ++j)
+		{
+			const GF61 u0 = z[2 * j + 0], u1 = z[2 * j + 1];
+			z[2 * j + 0] = u0 + u1;
+			z[2 * j + 1] = (u0 - u1).mulconj(w[n_4 + j]);
 		}
 	}
 
 	// Adjust the digits to the digit representation
 	void carry() const
 	{
-		const uint8_t ln = _ln;
-		const size_t n = _n;
+		const size_t n_2 = _n / 2;
 		GF61 * const z = _z;
 		const uint8_t * const digit_width = _digit_width;
 
-		// sqr and backward transform must be divided by 4n
 		uint64_t c = 0;
-		for (size_t k = 0; k < n / 2; ++k)
+		for (size_t k = 0; k < n_2; ++k)
 		{
-			z[k] = z[k].rshift(ln + 2, ln + 2).adc(digit_width[2 * k + 0], digit_width[2 * k + 1], c);
+			z[k] = z[k].adc(digit_width[2 * k + 0], digit_width[2 * k + 1], c);
 		}
 
 		while (c != 0)
 		{
-			for (size_t k = 0; k < n / 2; ++k)
+			for (size_t k = 0; k < n_2; ++k)
 			{
 				z[k] = z[k].adc(digit_width[2 * k + 0], digit_width[2 * k + 1], c);
 				if (c == 0) break;
@@ -314,11 +386,11 @@ private:
 
 public:
 	mersenne(const uint32_t q) : _ln(transformsize(q)), _n(size_t(1) << _ln),
-		_z(new GF61[_n]), _w(new GF61[_n]), _w_ib(new uint8_t[_n]), _digit_width(new uint8_t[_n])
+		_z(new GF61[_n]), _w(new GF61[5 * _n / 4]), _w_ib(new uint8_t[_n]), _digit_width(new uint8_t[_n])
 	{
 		const size_t n = _n;
 
-		// twiddle factors
+		// radix-2 twiddle factors
 		GF61 * const w = _w;
 		for (size_t s = 1; s <= n / 4; s *= 2)
 		{
@@ -326,11 +398,19 @@ public:
 			for (size_t j = 0; j < s; ++j) w[s + j] = r_s.pow(bitrev(j, s));
 		}
 
+		// radix-4 twiddle factors
+		for (size_t s = 1; s <= n / 4; s *= 2)
+		{
+			for (size_t j = 0; j < s; ++j) w[n / 2 + s + j] = w[s + j].mul(w[2 * (s + j)]);
+		}
+
 		// n values in GF(p) and a transform of length n/2 in GF(p^2) 
 		const GF61 r_n = GF61::root_one(n);
-		for (size_t j = 0, s = n / 4; j < s; ++j) w[n / 2 + j] = r_n.pow(bitrev(j, s));
+		for (size_t j = 0, s = n / 4; j < s; ++j) w[n + j] = r_n.pow(bitrev(j, s));
 
 		// IBDWT weights: x^q - 1 => x^n - 1
+		// See Richard Crandall, Barry Fagin, "Discrete weighted transforms and large-integer arithmetic", Math. Comp. 62 (1994), 305-324.
+
 		// Weights are power of two. Store log_2(weight).
 		uint8_t * const w_ib = _w_ib;
 		uint8_t * const digit_width = _digit_width;
@@ -387,10 +467,13 @@ public:
 
 	void square() const
 	{
-		// weighted convolution
-		forward();
-		sqr();
-		backward();
+		// weighted convolution, radix-4 transform
+		weight();
+		size_t m = _n / 4, s = 1;
+		for (; m > 1; m /= 4, s *= 4) forward4(m/2, s);
+		if (m == 1) sqr2(); else sqr();
+		for (m = (m == 1) ? 4 : 2, s /= 4; s >= 1; m *= 4, s /= 4) backward4(m/2, s);
+		unweight_norm();
 
 		// carry propagation
 		carry();
@@ -451,6 +534,7 @@ int main()
 			m.sub(2);
 		}
 
+		// IBDWT is modulo 2^p then 0 (mod p) is 0 or 2^p - 1.
 		if (m.is_zero() || m.is_Mp()) std::cout << p << std::endl;
 	}
 
