@@ -12,7 +12,9 @@ Let *n* be the length of the transform. Over the field Z/*p*Z, the NTT is a radi
 
 *M*<sub>61</sub> = 2<sup>61</sup>&nbsp;-&nbsp;1 can be compared to 2<sup>64</sup>&nbsp;-&nbsp;2<sup>32</sup>&nbsp;+&nbsp;1. The number of modular operations is +50% but the modular reduction is easier to calculate. With GF(*M*<sub>*q*</sub><sup>2</sup>), the weights are powers of two: weighting inputs and unweighting outputs are shift operations.  
 
-An important point: outputs are elements of Z/*q*Z. Two or more Mersenne primes can be used. We have a residue number system and the solution is obtained by the Chinese Remainder Theorem. With *M*<sub>61</sub> and *M*<sub>31</sub>, the outputs are 92-bit integers. It is more efficient than the single Mersenne prime *M*<sub>89</sub>. GPU are 32-bit processors and an implementation based on (*M*<sub>61</sub>;&nbsp;*M*<sub>31</sub>) is faster than only *M*<sub>61</sub> if the tested Mersenne number is large enough. The reduction in the size of the transform is a higher gain than the extra 32-bit operations.
+An important point: outputs are elements of Z/*q*Z. Two or more Mersenne primes can be used. We have a residue number system and the solution is obtained by the Chinese Remainder Theorem. With *M*<sub>61</sub> and *M*<sub>31</sub>, the outputs are 92-bit integers. It is more efficient than the single Mersenne prime *M*<sub>89</sub>. GPU are 32-bit processors and an implementation based on (*M*<sub>61</sub>;&nbsp;*M*<sub>31</sub>) is faster than only *M*<sub>61</sub> if the tested Mersenne number is large enough. The reduction in the size of the transform is a higher gain than the extra 32-bit operations.  
+
+The Lucas–Lehmer primality test is implemented in C++. The NTT is computed over the two fields GF(*M*<sub>61</sub><sup>2</sup>) and GF(*M*<sub>31</sub><sup>2</sup>) and the least absolute residues are 92-bit integers.  
 
 ## Build
 
@@ -21,6 +23,5 @@ The code has been validated with GCC 15.1.
 
 ## TODO
 
- - Implement the residue number system *M*<sub>61</sub> and *M*<sub>31</sub>.  
  - Replace the "Real-Valued FFT" with a fast algorithm based on the recursive polynomial factorization:  
    x<sup>2<sup>n</sup></sup>&nbsp;-&nbsp;1 = (x&nbsp;-&nbsp;1) Prod<sub>0&le;*k*<*n*&nbsp;</sub>(x<sup>2<sup>k-1</sup></sup>&nbsp;+&nbsp;1).  
