@@ -550,6 +550,7 @@ public:
 	mersenne(const uint32_t q) : _ln(transformsize(q)), _n(size_t(1) << _ln),
 		_z(new GF61_31[_n / 2]), _w(new GF61_31[5 * _n / 4]), _w_ib(new IBWeight[_n]), _digit_width(new uint8_t[_n])
 	{
+		const uint8_t ln = _ln;
 		const size_t n = _n;
 
 		// radix-2 twiddle factors
@@ -581,7 +582,7 @@ public:
 
 		w_ib[0] = IBWeight(0, 0);
 
-		const uint8_t q_n = uint8_t(q / n);
+		const uint8_t q_n = uint8_t(q >> ln);
 		// std::cout << q << ": length = " << n << ", digit-width = " << int(q_n) << "/" << int(q_n + 1) << std::endl;
 
 		uint32_t o = 0;
@@ -589,7 +590,7 @@ public:
 		{
 			const uint64_t qj = q * uint64_t(j);
 			// ceil(a / b) = floor((a - 1) / b) + 1
-			const uint32_t ceil_qj_n = uint32_t((qj - 1) / n + 1);
+			const uint32_t ceil_qj_n = uint32_t(((qj - 1) >> ln) + 1);
 
 			// bit position for digit[i] is ceil(qj / n)
 			if (j > 0)
@@ -604,7 +605,7 @@ public:
 					// e = (ceil(qj / n).n - qj) / n
 					// qj = k.n => e = 0
 					// qj = k.n + r, r > 0 => ((k + 1).n - (k.n + r)) / n = (n - r) / n
-					const uint32_t r = uint32_t(qj % n);
+					const uint32_t r = uint32_t(qj & (n - 1));
 					const uint8_t w61 = uint8_t((lr2_61 * (n - r)) % 61);
 					const uint8_t w31 = uint8_t((lr2_31 * (n - r)) % 31);
 					w_ib[j] = IBWeight(w61, w31);
