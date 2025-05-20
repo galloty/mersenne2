@@ -16,7 +16,7 @@ An important point: outputs are elements of Z/*q*Z. Two or more Mersenne primes 
 
 The Lucas–Lehmer primality test is implemented in C++. The NTT is computed over the two fields GF(*M*<sub>61</sub><sup>2</sup>) and GF(*M*<sub>31</sub><sup>2</sup>) and the least absolute residues are 92-bit integers.  
 
-The following table provides the transform size for different primes *q* and the three possible NTT. If the sizes are equal, GF(*M*<sub>61</sub><sup>2</sup>) is faster than 2<sup>64</sup>&nbsp;-&nbsp;2<sup>32</sup>&nbsp;+&nbsp;1, itself faster than GF(*M*<sub>61</sub><sup>2</sup>) &times; GF(*M*<sub>31</sub><sup>2</sup>). However, a smaller transform size is a better solution.
+The following table provides the transform size for different primes *q* and the three possible NTT. If the sizes are equal, GF(*M*<sub>61</sub><sup>2</sup>) is faster than Z/(2<sup>64</sup>&nbsp;-&nbsp;2<sup>32</sup>&nbsp;+&nbsp;1)Z, itself faster than GF(*M*<sub>61</sub><sup>2</sup>) &times; GF(*M*<sub>31</sub><sup>2</sup>). However, a smaller transform size is a better solution.
 | *q* | 2<sup>61</sup>&nbsp;-&nbsp;1 | 2<sup>64</sup>&nbsp;-&nbsp;2<sup>32</sup>&nbsp;+&nbsp;1 | (2<sup>61</sup>&nbsp;-&nbsp;1) (2<sup>31</sup>&nbsp;-&nbsp;1) | best transform |
 |:---:| ---:| ---:| ---:|:--- |
 | 133,100,017 | 2<sup>23</sup> | 2<sup>23</sup> | **2<sup>22</sup>** | (2<sup>61</sup>&nbsp;-&nbsp;1) (2<sup>31</sup>&nbsp;-&nbsp;1) |
