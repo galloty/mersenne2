@@ -13,13 +13,14 @@ Please give feedback to the authors if improvement is realized. It is distribute
 #include <cstdint>
 #include <cmath>
 
+#include <gmp.h>
+
 class Zp
 {
 private:
-	uint64_t n;
+	uint64_t _n;
 
-public:
-	static const uint64_t p = (((1ull << 32) - 1) << 32) + 1;	// 2^64 - 2^32 + 1
+	static const uint64_t _p = (((1ull << 32) - 1) << 32) + 1;	// 2^64 - 2^32 + 1
 
 private:
 	Zp reduce(const __uint128_t t) const
@@ -27,7 +28,7 @@ private:
 		const uint64_t hi = uint64_t(t >> 64), lo = uint64_t(t);
 
 		// hih * 2^96 + hil * 2^64 + lo = lo + hil * 2^32 - (hih + hil)
-		Zp r = Zp((lo >= p) ? lo - p : lo);
+		Zp r = Zp((lo >= _p) ? lo - _p : lo);
 		r += Zp(hi << 32);				// lhs * rhs < p^2 => hi * 2^32 < p^2 / 2^32 < p.
 		r -= Zp((hi >> 32) + uint32_t(hi));
 		return r;
@@ -35,20 +36,24 @@ private:
 
 public:
 	Zp() {}
-	Zp(const uint64_t l) : n(l) {}
+	Zp(const uint64_t n) : _n(n) {}
 
-	uint64_t get() const { return n; }
-	void set(const uint64_t l) { n = l; }
+	static uint64_t p() { return _p; }
 
-	Zp & operator+=(const Zp & rhs) { const uint64_t c = (n >= p - rhs.n) ? p : 0; n += rhs.n; n -= c; return *this; }
-	Zp & operator-=(const Zp & rhs) { const uint64_t c = (n < rhs.n) ? p : 0; n -= rhs.n; n += c; return *this; }
-	Zp & operator*=(const Zp & rhs) { *this = reduce(n * __uint128_t(rhs.n)); return *this; }
+	uint64_t get() const { return _n; }
+	void set(const uint64_t n) { _n = n; }
+
+	bool operator!=(const Zp & rhs) const { return (_n != rhs._n); }
+
+	Zp & operator+=(const Zp & rhs) { const uint64_t c = (_n >= _p - rhs._n) ? _p : 0; _n += rhs._n; _n -= c; return *this; }
+	Zp & operator-=(const Zp & rhs) { const uint64_t c = (_n < rhs._n) ? _p : 0; _n -= rhs._n; _n += c; return *this; }
+	Zp & operator*=(const Zp & rhs) { *this = reduce(_n * __uint128_t(rhs._n)); return *this; }
 
 	Zp operator+(const Zp & rhs) const { Zp r = *this; r += rhs; return r; }
 	Zp operator-(const Zp & rhs) const { Zp r = *this; r -= rhs; return r; }
-	Zp operator*(const Zp & rhs) const { return reduce(n * __uint128_t(rhs.n)); }
+	Zp operator*(const Zp & rhs) const { return reduce(_n * __uint128_t(rhs._n)); }
 
-	Zp muli() const { return reduce(__uint128_t(n) << 48); }	// sqrt(-1) = 2^48 (mod p)
+	Zp muli() const { return reduce(__uint128_t(_n) << 48); }	// sqrt(-1) = 2^48 (mod p)
 
 	Zp pow(const uint64_t e) const
 	{
@@ -65,8 +70,8 @@ public:
 		return r;
 	}
 
-	Zp invert() const { return Zp(pow(p - 2)); }
-	static const Zp primroot(const size_t n) { return Zp(7u).pow((p - 1) / n); }
+	Zp invert() const { return Zp(pow(_p - 2)); }
+	static const Zp primroot(const size_t n) { return Zp(7u).pow((_p - 1) / n); }
 };
 
 class mersenne
@@ -108,24 +113,17 @@ private:
 	}
 
 	// Add a carry onto the number and return the carry of the first digit_width bits
-	static constexpr uint64_t digit_adc(const uint64_t lhs, const int digit_width, uint64_t & carry)
+	static constexpr uint32_t digit_adc(const uint64_t lhs, const int digit_width, uint64_t & carry)
 	{
 		const uint64_t s = lhs + carry;
-		const uint64_t c =  s < lhs;
+		const uint64_t c = (s < lhs) ? 1 : 0;
 		carry = (s >> digit_width) + (c << (64 - digit_width));
-		return s & ((uint64_t(1) << digit_width) - 1);
+		return uint32_t(s) & ((uint32_t(1) << digit_width) - 1);
 	}
 
-	void mul(const Zp * const y) const
-	{
-		Zp * const x = _x;
-		for (size_t k = 0, n = _n; k < n; ++k) x[k] *= y[k];
-	}
-
-	void ntt() const
+	void ntt(Zp * const x) const
 	{
 		const size_t n = _n, n5 = _n5;
-		Zp * const x = _x;
 		const Zp * const w = _w;
 		const Zp * const w5 = _w5;
 
@@ -166,10 +164,9 @@ private:
 		}
 	}
 
-	void nttinv() const
+	void nttinv(Zp * const x) const
 	{
 		const size_t n = _n, n5 = _n5;
-		Zp * const x = _x;
 		const Zp * const invw = _invw;
 		const Zp * const invw5 = _invw5;
 
@@ -211,37 +208,36 @@ private:
 		}
 	}
 
-	void square1() const
+	void mul1(Zp * const x, const Zp * const y) const
 	{
-		const size_t n = _n;
-		Zp * const x = _x;
-
-		for (size_t k = 0; k < n; ++k) x[k] *= x[k];
+		for (size_t k = 0, n = _n; k < n; ++k) x[k] *= y[k];
 	}
 
-	void square2() const
+	void mul2(Zp * const x, const Zp * const y) const
 	{
-		const size_t n = _n;
-		Zp * const x = _x;
-
-		for (size_t k = 0; k < n; k += 2)
+		for (size_t k = 0, n = _n; k < n; k += 2)
 		{
-			// Radix-2 NTT, square, Radix-2 inverse NTT
-			const Zp u0 = x[k + 0], u1 = x[k + 1];
-			const Zp v0 = u0 + u1, v1 = u0 - u1;
-			const Zp s0 = v0 * v0, s1 = v1 * v1;
+			// Radix-2 NTT, mul, Radix-2 inverse NTT
+			const Zp u0 = x[k + 0], u1 = x[k + 1], up0 = y[k + 0], up1 = y[k + 1];
+			const Zp v0 = u0 + u1, v1 = u0 - u1, vp0 = up0 + up1, vp1 = up0 - up1;
+			const Zp s0 = v0 * vp0, s1 = v1 * vp1;
 			x[k + 0] = s0 + s1; x[k + 1] = s0 - s1;
 		}
 	}
 
-	void carry() const
+	void carry_mul(Zp * const x, const uint32_t a) const
 	{
 		const size_t n = _n;
-		Zp * const x = _x;
 		const int * const digit_width = _digit_width;
 
 		uint64_t c = 0;
-		for (size_t k = 0; k < n; ++k) x[k].set(digit_adc(x[k].get(), digit_width[k], c));
+		for (size_t k = 0; k < n; ++k)
+		{
+			uint64_t c1 = 0;
+			const uint32_t d = digit_adc(x[k].get(), digit_width[k], c1);
+			x[k].set(digit_adc(uint64_t(d) * a, digit_width[k], c));
+			c += a * c1;
+		} 
 
 		while (c != 0)
 		{
@@ -255,7 +251,8 @@ private:
 
 public:
 	mersenne(const uint32_t q) : _n(transformsize(q)), _n5((_n % 5 == 0) ? _n / 5 : _n),
-		_x(new Zp[_n]), _w(new Zp[3 * _n5]), _invw(new Zp[3 * _n5]),
+		_x(new Zp[3 * _n]),	// allocate 3 buffers
+		 _w(new Zp[3 * _n5]), _invw(new Zp[3 * _n5]),
 		_w5((_n % 5 == 0) ? new Zp[4 * _n5] : nullptr), _invw5((_n % 5 == 0) ? new Zp[4 * _n5] : nullptr),
 		_digit_weight(new Zp[_n]), _digit_invweight(new Zp[_n]), _digit_width(new int[_n])
 	{
@@ -322,7 +319,7 @@ public:
 		int * const digit_width = _digit_width;
 
 		// n-th root of two
-		const Zp nr2 = Zp(554u).pow((Zp::p - 1) / 192 / n);
+		const Zp nr2 = Zp(554u).pow((Zp::p() - 1) / 192 / n);
 		const Zp inv_n = Zp(n).invert();
 
 		const uint32_t q_n = q / n;
@@ -378,69 +375,81 @@ public:
 
 	size_t get_length() const { return _n; }
 
-	void init(const size_t a) const
+	void set(const size_t dst, const size_t a) const
 	{
 		const size_t n = _n;
-		Zp * const x = _x;
+		Zp * const x = &_x[dst * n];
 
 		x[0] = Zp(a);
 		for (size_t k = 1; k < n; ++k) x[k] = Zp(0u);
 	}
 
-	void square() const
+	void copy(const size_t dst, const size_t src) const
 	{
+		const size_t n = _n;
+		const Zp * const x = &_x[src * n];
+		Zp * const y = &_x[dst * n];
+
+		for (size_t k = 0; k < n; ++k) y[k] = x[k];
+	}
+
+	bool is_equal(const size_t src1, const size_t src2) const
+	{
+		const size_t n = _n;
+		const Zp * const x = &_x[src1 * n];
+		const Zp * const y = &_x[src2 * n];
+
+		for (size_t k = 0; k < n; ++k) if (y[k] != x[k]) return false;
+		return true;
+	}
+
+	void square_mul(const size_t src, const uint32_t a = 1) const
+	{
+		Zp * const x = &_x[src * _n];
+
 		// weighted convolution
-		mul(_digit_weight);
-		ntt();
-		if (_even_exponent) square1(); else square2();
-		nttinv();
-		mul(_digit_invweight);
+		mul1(x, _digit_weight);
+		ntt(x);
+		if (_even_exponent) mul1(x, x); else mul2(x, x);
+		nttinv(x);
+		mul1(x, _digit_invweight);
+
+		// multiply by a and carry propagation
+		carry_mul(x, a);
+	}
+
+	// src is destroyed
+	void mul(const size_t dst, const size_t src) const
+	{
+		Zp * const x = &_x[dst * _n];
+		Zp * const y = &_x[src * _n];
+
+		// weighted convolution
+		mul1(x, _digit_weight);
+		ntt(x);
+		mul1(y, _digit_weight);
+		ntt(y);
+		if (_even_exponent) mul1(x, y); else mul2(x, y);
+		nttinv(x);
+		mul1(x, _digit_invweight);
 
 		// carry propagation
-		carry();
+		carry_mul(x, 1);
 	}
 
-	void sub(const uint32_t a) const
+	bool is_one() const
 	{
 		const size_t n = _n;
-		Zp * const x = _x;
-		const int * const digit_width = _digit_width;
+		const Zp * const x = _x;
 
-		uint32_t c = a;
-		while (c != 0)
-		{
-			for (size_t k = 0; k < n; ++k)
-			{
-				const uint32_t b = uint32_t(1) << digit_width[k];
-				const uint64_t xk = x[k].get();
-				if (xk >= c)
-				{
-					x[k].set(xk - c);
-					return;	// done if no carry
-				}
-				x[k].set(xk - c + b);
-				c = 1;
-			}
-		}
-	}
-
-	bool is_zero() const
-	{
-		const size_t n = _n;
-		Zp * const x = _x;
-
-		for (size_t k = 0; k < n; ++k) if (x[k].get() != 0) return false;
+		if (x[0].get() != 1) return false;
+		for (size_t k = 1; k < n; ++k) if (x[k].get() != 0) return false;
 		return true;
 	}
 
-	bool is_Mp() const
+	void error() const
 	{
-		const size_t n = _n;
-		Zp * const x = _x;
-		const int * const digit_width = _digit_width;
-
-		for (size_t k = 0; k < n; ++k) if (x[k].get() != (uint64_t(1) << digit_width[k]) - 1) return false;
-		return true;
+		_x[_n / 2] += Zp(1);
 	}
 };
 
@@ -460,14 +469,65 @@ int main()
 		++count;
 		if (m.get_length() % 5 == 0) ++count5;
 
-		m.init(4);
-		for (uint32_t i = 0; i < p - 2; ++i)
+		mpz_t exponent; mpz_init_set_ui(exponent, 1u);
+		mpz_mul_2exp(exponent, exponent, static_cast<mp_bitcnt_t>(p)); mpz_sub_ui(exponent, exponent, 2u);
+
+		// Gerbicz-Li error checking
+		const int B_GL = int(std::sqrt(p));
+
+		// 3-prp test, left-to-right binary exponentiation
+		m.set(0, 1u);	// result = 1
+		m.set(1, 1u);	// d(t) = 1
+		for (int i = static_cast<int>(mpz_sizeinbase(exponent, 2)) - 1; i >= 0; --i)
 		{
-			m.square();
-			m.sub(2);
+			m.square_mul(0, (mpz_tstbit(exponent, static_cast<mp_bitcnt_t>(i)) != 0) ? 3 : 1);
+			if ((p == 1511) && (i == 0)) m.error();	// test Gerbicz-Li
+
+			if ((i % B_GL == 0) && (i != 0))
+			{
+				m.copy(2, 0);	// copy result
+				m.mul(1, 2);	// d(t + 1) = d(t) * result
+			}
 		}
 
-		if (m.is_zero() || m.is_Mp()) std::cout << p << ": " << m.get_length() << " (radix-5: " << count5 << "/" << count << " = " << 100.0 * count5 / count <<  "%)" << std::endl;
+		const bool is_one = m.is_one();	// prp?
+
+		// d(t + 1) = d(t) * result
+		m.copy(2, 1);
+		m.mul(2, 0);
+
+		// d(t)^{2^B}
+		for (int i = B_GL - 1; i >= 0; --i) m.square_mul(1);
+
+		// Exponent of double check process. See:
+		// An Efficient Modular Exponentiation Proof Scheme, Darren Li, Yves Gallot, https://arxiv.org/abs/2209.15623
+		mpz_t res; mpz_init_set_ui(res, 0);
+		mpz_t e, t; mpz_init_set(e, exponent); mpz_init(t);
+		while (mpz_sgn(e) != 0)
+		{
+			mpz_mod_2exp(t, e, static_cast<mp_bitcnt_t>(B_GL));
+			mpz_add(res, res, t);
+			mpz_div_2exp(e, e, static_cast<mp_bitcnt_t>(B_GL));
+		}
+		mpz_clear(e); mpz_clear(t);
+
+		mpz_clear(exponent);
+
+		// 3^res
+		m.set(0, 1u);
+		for (int i = static_cast<int>(mpz_sizeinbase(res, 2)) - 1; i >= 0; --i)
+		{
+			m.square_mul(0, (mpz_tstbit(res, static_cast<mp_bitcnt_t>(i)) != 0) ? 3 : 1);
+		}
+
+		mpz_clear(res);
+
+		// d(t)^{2^B} * 3^res
+		m.mul(0, 1);
+
+		if (!m.is_equal(0, 2)) std::cout << p << ": Gerbicz-Li failed!" << std::endl;
+
+		if (is_one) std::cout << p << ": " << m.get_length() << " (radix-5: " << count5 << "/" << count << " = " << 100.0 * count5 / count <<  "%)" << std::endl;
 	}
 
 	return EXIT_SUCCESS;
