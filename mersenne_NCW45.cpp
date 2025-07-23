@@ -453,29 +453,29 @@ int main()
 	size_t count = 0, count5 = 0;
 
 	// 3, 5, 7, 13, 17, 19, 31, 61, 89, 107, 127, 521, 607, 1279, 2203, 2281, 3217, 4253, 4423, 9689, 9941, 11213, 19937, 21701, 23209, 44497, 86243, ...
-	for (int p = 3; p <= 1207959503; p += 2)
+	for (uint32_t p = 3; p <= 1207959503; p += 2)
 	{
 		bool isprime = true;
-		for (int d = 3; p / d >= d; d += 2) if (p % d == 0) { isprime = false; break; }
+		for (uint32_t d = 3; p / d >= d; d += 2) if (p % d == 0) { isprime = false; break; }
 		if (!isprime) continue;
 
-		mersenne m(static_cast<uint32_t>(p));
+		mersenne m(p);
 
 		++count;
 		if (m.get_length() % 5 == 0) ++count5;
 
 		// Gerbicz-Li error checking
-		const int B_GL = std::max(int(std::sqrt(p)), 2);
+		const uint32_t B_GL = std::max(uint32_t(std::sqrt(p)), 2u);
 
 		// 3^{2^p}
 		m.set(0, 3u);	// result = 3
 		m.set(1, 1u);	// d(t) = 1
-		for (int i = p - 1; i >= 0; --i)
+		for (uint32_t i = 0, j = p - 1; i < p; ++i, --j)
 		{
 			m.square(0);
-			if ((p == 1511) && (i == 0)) m.error();	// test Gerbicz-Li
+			if ((p == 1511) && (j == 0)) m.error();	// test Gerbicz-Li
 
-			if ((i % B_GL == 0) && (i != 0))
+			if ((j % B_GL == 0) && (j != 0))
 			{
 				m.copy(2, 0);	// copy result
 				m.mul(1, 2);	// d(t + 1) = d(t) * result
@@ -489,20 +489,16 @@ int main()
 		m.copy(2, 1);
 		m.mul(2, 0);
 
-		// d(t)^{2^B}
-		for (int i = B_GL - 1; i >= 0; --i) m.square(1);
-
 		// The exponent of the residue is 2^(p mod B)
 		// See: An Efficient Modular Exponentiation Proof Scheme, §2, Darren Li, Yves Gallot, https://arxiv.org/abs/2209.15623
 
-		// 3^{2^(p mod B_GL)}
+		// d(t)^{2^B} * 3^{2^(p mod B)} = (3 * d(t)^{2^(B - p mod B)})^{2^(p mod B)}
+		for (uint32_t i = 0; i < B_GL - p % B_GL; ++i) m.square(1);
 		m.set(0, 3u);
-		for (int i = p % B_GL - 1; i >= 0; --i) m.square(0);
+		m.mul(1, 0);
+		for (uint32_t i = 0; i < p % B_GL; ++i) m.square(1);
 
-		// d(t)^{2^B} * 3^{2^(p mod B_GL)}
-		m.mul(0, 1);
-
-		if (!m.is_equal(0, 2)) std::cout << p << ": Gerbicz-Li failed!" << std::endl;
+		if (!m.is_equal(1, 2)) std::cout << p << ": Gerbicz-Li failed!" << std::endl;
 
 		if (is_prp) std::cout << p << ": " << m.get_length() << " (radix-5: " << count5 << "/" << count << " = " << 100.0 * count5 / count <<  "%)" << std::endl;
 	}
