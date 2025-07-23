@@ -72,7 +72,7 @@ public:
 	static const Zp primroot(const size_t n) { return Zp(7u).pow((_p - 1) / n); }
 };
 
-class mersenne
+class Mersenne
 {
 private:
 	const size_t _n, _n5;
@@ -127,17 +127,20 @@ private:
 
 		if (n % 5 == 0)
 		{
-			static const Zp r1 = Zp::primroot(5u), r2 = r1 * r1, r3 = r2 * r1, r4 = r2 * r2;
+			static const Zp K = Zp::primroot(5u), K2 = K * K;
 
 			// Radix-5
 			for (size_t k = 0; k < n5; ++k)
 			{
-				const Zp t0 = x[k + 0 * n5], t1 = x[k + 1 * n5], t2 = x[k + 2 * n5], t3 = x[k + 3 * n5], t4 = x[k + 4 * n5];
-				x[k + 0 * n5] =  t0 +      t1 +      t2 +      t3 +      t4;
-				x[k + 1 * n5] = (t0 + r1 * t1 + r2 * t2 + r3 * t3 + r4 * t4) * w5[4 * k + 0];
-				x[k + 2 * n5] = (t0 + r2 * t1 + r4 * t2 + r1 * t3 + r3 * t4) * w5[4 * k + 1];
-				x[k + 3 * n5] = (t0 + r3 * t1 + r1 * t2 + r4 * t3 + r2 * t4) * w5[4 * k + 2];
-				x[k + 4 * n5] = (t0 + r4 * t1 + r3 * t2 + r2 * t3 + r1 * t4) * w5[4 * k + 3];
+				const Zp u0 = x[k + 0 * n5], u1 = x[k + 1 * n5], u2 = x[k + 2 * n5], u3 = x[k + 3 * n5], u4 = x[k + 4 * n5];
+				// 20 add, 16 mul => 26 add, 10 mul
+				const Zp t14 = K * (u1 - u4), t23 = K * (u2 - u3);	// K^4 = -(1 + K + K^2 + K^3)
+				const Zp t12 = K2 * (u1 - u2), t13 = K2 * (u1 - u3), t24 = K2 * (u2 - u4), t34 = K2 * (u3 - u4);
+				x[k + 0 * n5] = u0 + u1 + u2 + u3 + u4;
+				x[k + 1 * n5] = (u0 - u4 +     t14 + t24 + K * t34) * w5[4 * k + 0];
+				x[k + 2 * n5] = (u0 - u2 +     t12 - t23 - K * t24) * w5[4 * k + 1];
+				x[k + 3 * n5] = (u0 - u3 + K * t13 + t23 -     t34) * w5[4 * k + 2];
+				x[k + 4 * n5] = (u0 - u1 - K * t12 - t13 -     t14) * w5[4 * k + 3];
 			}
 		}
 
@@ -190,18 +193,21 @@ private:
 
 		if (n % 5 == 0)
 		{
-			static const Zp r1 = Zp::primroot(5u), r2 = r1 * r1, r3 = r2 * r1, r4 = r2 * r2;
+			static const Zp K = Zp::primroot(5u), K2 = K * K;
 
 			// Radix-5
 			for (size_t k = 0; k < n5; ++k)
 			{
-				const Zp t0 = x[k + 0 * n5], t1 = x[k + 1 * n5] * invw5[4 * k + 0], t2 = x[k + 2 * n5] * invw5[4 * k + 1];
-				const Zp t3 = x[k + 3 * n5] * invw5[4 * k + 2], t4 = x[k + 4 * n5] * invw5[4 * k + 3];
-				x[k + 0 * n5] = t0 + t1 + t2 + t3 + t4;
-				x[k + 1 * n5] = t0 + r4 * t1 + r3 * t2 + r2 * t3 + r1 * t4;
-				x[k + 2 * n5] = t0 + r3 * t1 + r1 * t2 + r4 * t3 + r2 * t4;
-				x[k + 3 * n5] = t0 + r2 * t1 + r4 * t2 + r1 * t3 + r3 * t4;
-				x[k + 4 * n5] = t0 + r1 * t1 + r2 * t2 + r3 * t3 + r4 * t4;
+				const Zp u0 = x[k + 0 * n5], u1 = x[k + 1 * n5] * invw5[4 * k + 0], u2 = x[k + 2 * n5] * invw5[4 * k + 1];
+				const Zp u3 = x[k + 3 * n5] * invw5[4 * k + 2], u4 = x[k + 4 * n5] * invw5[4 * k + 3];
+				// 20 add, 16 mul => 26 add, 10 mul
+				const Zp t14 = K * (u1 - u4), t23 = K * (u2 - u3);	// K^4 = -(1 + K + K^2 + K^3)
+				const Zp t12 = K2 * (u1 - u2), t13 = K2 * (u1 - u3), t24 = K2 * (u2 - u4), t34 = K2 * (u3 - u4);
+				x[k + 0 * n5] = u0 + u1 + u2 + u3 + u4;
+				x[k + 1 * n5] = u0 - u1 - K * t12 - t13 -     t14;
+				x[k + 2 * n5] = u0 - u3 + K * t13 + t23 -     t34;
+				x[k + 3 * n5] = u0 - u2 +     t12 - t23 - K * t24;
+				x[k + 4 * n5] = u0 - u4 +     t14 + t24 + K * t34;
 			}
 		}
 	}
@@ -245,8 +251,8 @@ private:
 	}
 
 public:
-	mersenne(const uint32_t q) : _n(transformsize(q)), _n5((_n % 5 == 0) ? _n / 5 : _n),
-		_x(new Zp[3 * _n]),	// allocate 3 buffers
+	Mersenne(const uint32_t q) : _n(transformsize(q)), _n5((_n % 5 == 0) ? _n / 5 : _n),
+		_x(new Zp[3 * _n]),	// allocate 3 registers
 		_w(new Zp[3 * _n5]), _invw(new Zp[3 * _n5]),
 		_w5((_n % 5 == 0) ? new Zp[4 * _n5] : nullptr), _invw5((_n % 5 == 0) ? new Zp[4 * _n5] : nullptr),
 		_digit_weight(new Zp[_n]), _digit_invweight(new Zp[_n]), _digit_width(new int[_n])
@@ -353,7 +359,7 @@ public:
 		}
 	}
 
-	virtual ~mersenne()
+	virtual ~Mersenne()
 	{
 		delete[] _x;
 		delete[] _w;
@@ -370,20 +376,22 @@ public:
 
 	size_t get_length() const { return _n; }
 
-	void set(const size_t dst, const size_t a) const
+	enum class Reg : uint32_t { R0 = 0, R1 = 1, R2 = 2 };
+
+	void set(const Reg dst, const size_t a) const
 	{
 		const size_t n = _n;
-		Zp * const x = &_x[dst * n];
+		Zp * const x = &_x[uint32_t(dst) * n];
 
 		x[0] = Zp(a);
 		for (size_t k = 1; k < n; ++k) x[k] = Zp(0u);
 	}
 
-	void copy(const size_t dst, const size_t src) const
+	void copy(const Reg dst, const Reg src) const
 	{
 		const size_t n = _n;
-		const Zp * const x = &_x[src * n];
-		Zp * const y = &_x[dst * n];
+		const Zp * const x = &_x[uint32_t(src) * n];
+		Zp * const y = &_x[uint32_t(dst) * n];
 
 		for (size_t k = 0; k < n; ++k) y[k] = x[k];
 	}
@@ -398,19 +406,19 @@ public:
 		return true;
 	}
 
-	bool is_equal(const size_t src1, const size_t src2) const
+	bool is_equal(const Reg src1, const Reg src2) const
 	{
 		const size_t n = _n;
-		const Zp * const x = &_x[src1 * n];
-		const Zp * const y = &_x[src2 * n];
+		const Zp * const x = &_x[uint32_t(src1) * n];
+		const Zp * const y = &_x[uint32_t(src2) * n];
 
 		for (size_t k = 0; k < n; ++k) if (y[k] != x[k]) return false;
 		return true;
 	}
 
-	void square(const size_t src) const
+	void square(const Reg src) const
 	{
-		Zp * const x = &_x[src * _n];
+		Zp * const x = &_x[uint32_t(src) * _n];
 
 		// weighted convolution
 		mul1(x, _digit_weight);
@@ -424,10 +432,10 @@ public:
 	}
 
 	// src is destroyed
-	void mul(const size_t dst, const size_t src) const
+	void mul(const Reg dst, const Reg src) const
 	{
-		Zp * const x = &_x[dst * _n];
-		Zp * const y = &_x[src * _n];
+		Zp * const x = &_x[uint32_t(dst) * _n];
+		Zp * const y = &_x[uint32_t(src) * _n];
 
 		// weighted convolution
 		mul1(y, _digit_weight);
@@ -450,6 +458,8 @@ public:
 
 int main()
 {
+	using Reg = Mersenne::Reg;
+
 	size_t count = 0, count5 = 0;
 
 	// 3, 5, 7, 13, 17, 19, 31, 61, 89, 107, 127, 521, 607, 1279, 2203, 2281, 3217, 4253, 4423, 9689, 9941, 11213, 19937, 21701, 23209, 44497, 86243, ...
@@ -459,7 +469,7 @@ int main()
 		for (uint32_t d = 3; p / d >= d; d += 2) if (p % d == 0) { isprime = false; break; }
 		if (!isprime) continue;
 
-		mersenne m(p);
+		Mersenne m(p);
 
 		++count;
 		if (m.get_length() % 5 == 0) ++count5;
@@ -468,17 +478,17 @@ int main()
 		const uint32_t B_GL = std::max(uint32_t(std::sqrt(p)), 2u);
 
 		// 3^{2^p}
-		m.set(0, 3u);	// result = 3
-		m.set(1, 1u);	// d(t) = 1
+		m.set(Reg::R0, 3u);	// result = 3
+		m.set(Reg::R1, 1u);	// d(t) = 1
 		for (uint32_t i = 0, j = p - 1; i < p; ++i, --j)
 		{
-			m.square(0);
+			m.square(Reg::R0);
 			if ((p == 1511) && (j == 0)) m.error();	// test Gerbicz-Li
 
 			if ((j % B_GL == 0) && (j != 0))
 			{
-				m.copy(2, 0);	// copy result
-				m.mul(1, 2);	// d(t + 1) = d(t) * result
+				m.copy(Reg::R2, Reg::R0);	// copy result
+				m.mul(Reg::R1, Reg::R2);	// d(t + 1) = d(t) * result
 			}
 		}
 
@@ -486,19 +496,19 @@ int main()
 		const bool is_prp = m.is_equal((p == 3) ? 9u % ((1u << p) - 1u) : 9u);
 
 		// d(t + 1) = d(t) * result
-		m.copy(2, 1);
-		m.mul(2, 0);
+		m.copy(Reg::R2, Reg::R1);
+		m.mul(Reg::R2, Reg::R0);
 
 		// The exponent of the residue is 2^(p mod B)
 		// See: An Efficient Modular Exponentiation Proof Scheme, §2, Darren Li, Yves Gallot, https://arxiv.org/abs/2209.15623
 
 		// d(t)^{2^B} * 3^{2^(p mod B)} = (3 * d(t)^{2^(B - p mod B)})^{2^(p mod B)}
-		for (uint32_t i = 0; i < B_GL - p % B_GL; ++i) m.square(1);
-		m.set(0, 3u);
-		m.mul(1, 0);
-		for (uint32_t i = 0; i < p % B_GL; ++i) m.square(1);
+		for (uint32_t i = 0; i < B_GL - p % B_GL; ++i) m.square(Reg::R1);
+		m.set(Reg::R0, 3u);
+		m.mul(Reg::R1, Reg::R0);
+		for (uint32_t i = 0; i < p % B_GL; ++i) m.square(Reg::R1);
 
-		if (!m.is_equal(1, 2)) std::cout << p << ": Gerbicz-Li failed!" << std::endl;
+		if (!m.is_equal(Reg::R1, Reg::R2)) std::cout << p << ": Gerbicz-Li failed!" << std::endl;
 
 		if (is_prp) std::cout << p << ": " << m.get_length() << " (radix-5: " << count5 << "/" << count << " = " << 100.0 * count5 / count <<  "%)" << std::endl;
 	}
