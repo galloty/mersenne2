@@ -13,8 +13,6 @@ Please give feedback to the authors if improvement is realized. It is distribute
 #include <cstdint>
 #include <cmath>
 
-#include <gmp.h>
-
 class Zp
 {
 private:
@@ -213,11 +211,11 @@ private:
 		for (size_t k = 0, n = _n; k < n; ++k) x[k] *= y[k];
 	}
 
+	// Radix-2 NTT, mul, Radix-2 inverse NTT
 	void mul2(Zp * const x, const Zp * const y) const
 	{
 		for (size_t k = 0, n = _n; k < n; k += 2)
 		{
-			// Radix-2 NTT, mul, Radix-2 inverse NTT
 			const Zp u0 = x[k + 0], u1 = x[k + 1], up0 = y[k + 0], up1 = y[k + 1];
 			const Zp v0 = u0 + u1, v1 = u0 - u1, vp0 = up0 + up1, vp1 = up0 - up1;
 			const Zp s0 = v0 * vp0, s1 = v1 * vp1;
@@ -225,7 +223,7 @@ private:
 		}
 	}
 
-	void carry_mul(Zp * const x, const uint32_t a) const
+	void carry(Zp * const x) const
 	{
 		const size_t n = _n;
 		const int * const digit_width = _digit_width;
@@ -233,10 +231,7 @@ private:
 		uint64_t c = 0;
 		for (size_t k = 0; k < n; ++k)
 		{
-			uint64_t c1 = 0;
-			const uint32_t d = digit_adc(x[k].get(), digit_width[k], c1);
-			x[k].set(digit_adc(uint64_t(d) * a, digit_width[k], c));
-			c += a * c1;
+			x[k].set(digit_adc(x[k].get(), digit_width[k], c));
 		} 
 
 		while (c != 0)
@@ -252,7 +247,7 @@ private:
 public:
 	mersenne(const uint32_t q) : _n(transformsize(q)), _n5((_n % 5 == 0) ? _n / 5 : _n),
 		_x(new Zp[3 * _n]),	// allocate 3 buffers
-		 _w(new Zp[3 * _n5]), _invw(new Zp[3 * _n5]),
+		_w(new Zp[3 * _n5]), _invw(new Zp[3 * _n5]),
 		_w5((_n % 5 == 0) ? new Zp[4 * _n5] : nullptr), _invw5((_n % 5 == 0) ? new Zp[4 * _n5] : nullptr),
 		_digit_weight(new Zp[_n]), _digit_invweight(new Zp[_n]), _digit_width(new int[_n])
 	{
@@ -393,6 +388,16 @@ public:
 		for (size_t k = 0; k < n; ++k) y[k] = x[k];
 	}
 
+	bool is_equal(const uint32_t a) const
+	{
+		const size_t n = _n;
+		const Zp * const x = _x;
+
+		if (x[0].get() + (x[1].get() << _digit_width[0]) != a) return false;
+		for (size_t k = 2; k < n; ++k) if (x[k].get() != 0) return false;
+		return true;
+	}
+
 	bool is_equal(const size_t src1, const size_t src2) const
 	{
 		const size_t n = _n;
@@ -403,7 +408,7 @@ public:
 		return true;
 	}
 
-	void square_mul(const size_t src, const uint32_t a = 1) const
+	void square(const size_t src) const
 	{
 		Zp * const x = &_x[src * _n];
 
@@ -414,8 +419,8 @@ public:
 		nttinv(x);
 		mul1(x, _digit_invweight);
 
-		// multiply by a and carry propagation
-		carry_mul(x, a);
+		// carry propagation
+		carry(x);
 	}
 
 	// src is destroyed
@@ -425,26 +430,16 @@ public:
 		Zp * const y = &_x[src * _n];
 
 		// weighted convolution
-		mul1(x, _digit_weight);
-		ntt(x);
 		mul1(y, _digit_weight);
 		ntt(y);
+		mul1(x, _digit_weight);
+		ntt(x);
 		if (_even_exponent) mul1(x, y); else mul2(x, y);
 		nttinv(x);
 		mul1(x, _digit_invweight);
 
 		// carry propagation
-		carry_mul(x, 1);
-	}
-
-	bool is_one() const
-	{
-		const size_t n = _n;
-		const Zp * const x = _x;
-
-		if (x[0].get() != 1) return false;
-		for (size_t k = 1; k < n; ++k) if (x[k].get() != 0) return false;
-		return true;
+		carry(x);
 	}
 
 	void error() const
@@ -458,29 +453,26 @@ int main()
 	size_t count = 0, count5 = 0;
 
 	// 3, 5, 7, 13, 17, 19, 31, 61, 89, 107, 127, 521, 607, 1279, 2203, 2281, 3217, 4253, 4423, 9689, 9941, 11213, 19937, 21701, 23209, 44497, 86243, ...
-	for (uint32_t p = 3; p <= 1207959503; p += 2)
+	for (int p = 3; p <= 1207959503; p += 2)
 	{
 		bool isprime = true;
-		for (uint32_t d = 3; p / d >= d; d += 2) if (p % d == 0) { isprime = false; break; }
+		for (int d = 3; p / d >= d; d += 2) if (p % d == 0) { isprime = false; break; }
 		if (!isprime) continue;
 
-		mersenne m(p);
+		mersenne m(static_cast<uint32_t>(p));
 
 		++count;
 		if (m.get_length() % 5 == 0) ++count5;
 
-		mpz_t exponent; mpz_init_set_ui(exponent, 1u);
-		mpz_mul_2exp(exponent, exponent, static_cast<mp_bitcnt_t>(p)); mpz_sub_ui(exponent, exponent, 2u);
-
 		// Gerbicz-Li error checking
-		const int B_GL = int(std::sqrt(p));
+		const int B_GL = std::max(int(std::sqrt(p)), 2);
 
-		// 3-prp test, left-to-right binary exponentiation
-		m.set(0, 1u);	// result = 1
+		// 3^{2^p}
+		m.set(0, 3u);	// result = 3
 		m.set(1, 1u);	// d(t) = 1
-		for (int i = static_cast<int>(mpz_sizeinbase(exponent, 2)) - 1; i >= 0; --i)
+		for (int i = p - 1; i >= 0; --i)
 		{
-			m.square_mul(0, (mpz_tstbit(exponent, static_cast<mp_bitcnt_t>(i)) != 0) ? 3 : 1);
+			m.square(0);
 			if ((p == 1511) && (i == 0)) m.error();	// test Gerbicz-Li
 
 			if ((i % B_GL == 0) && (i != 0))
@@ -490,44 +482,29 @@ int main()
 			}
 		}
 
-		const bool is_one = m.is_one();	// prp?
+		// 3-prp test: 3^{(2^p - 1) - 1} ?= 1  <=>  3^{2^p} ?= 9
+		const bool is_prp = m.is_equal((p == 3) ? 9u % ((1u << p) - 1u) : 9u);
 
 		// d(t + 1) = d(t) * result
 		m.copy(2, 1);
 		m.mul(2, 0);
 
 		// d(t)^{2^B}
-		for (int i = B_GL - 1; i >= 0; --i) m.square_mul(1);
+		for (int i = B_GL - 1; i >= 0; --i) m.square(1);
 
-		// Exponent of double check process. See:
-		// An Efficient Modular Exponentiation Proof Scheme, Darren Li, Yves Gallot, https://arxiv.org/abs/2209.15623
-		mpz_t res; mpz_init_set_ui(res, 0);
-		mpz_t e, t; mpz_init_set(e, exponent); mpz_init(t);
-		while (mpz_sgn(e) != 0)
-		{
-			mpz_mod_2exp(t, e, static_cast<mp_bitcnt_t>(B_GL));
-			mpz_add(res, res, t);
-			mpz_div_2exp(e, e, static_cast<mp_bitcnt_t>(B_GL));
-		}
-		mpz_clear(e); mpz_clear(t);
+		// The exponent of the residue is 2^(p mod B)
+		// See: An Efficient Modular Exponentiation Proof Scheme, §2, Darren Li, Yves Gallot, https://arxiv.org/abs/2209.15623
 
-		mpz_clear(exponent);
+		// 3^{2^(p mod B_GL)}
+		m.set(0, 3u);
+		for (int i = p % B_GL - 1; i >= 0; --i) m.square(0);
 
-		// 3^res
-		m.set(0, 1u);
-		for (int i = static_cast<int>(mpz_sizeinbase(res, 2)) - 1; i >= 0; --i)
-		{
-			m.square_mul(0, (mpz_tstbit(res, static_cast<mp_bitcnt_t>(i)) != 0) ? 3 : 1);
-		}
-
-		mpz_clear(res);
-
-		// d(t)^{2^B} * 3^res
+		// d(t)^{2^B} * 3^{2^(p mod B_GL)}
 		m.mul(0, 1);
 
 		if (!m.is_equal(0, 2)) std::cout << p << ": Gerbicz-Li failed!" << std::endl;
 
-		if (is_one) std::cout << p << ": " << m.get_length() << " (radix-5: " << count5 << "/" << count << " = " << 100.0 * count5 / count <<  "%)" << std::endl;
+		if (is_prp) std::cout << p << ": " << m.get_length() << " (radix-5: " << count5 << "/" << count << " = " << 100.0 * count5 / count <<  "%)" << std::endl;
 	}
 
 	return EXIT_SUCCESS;
