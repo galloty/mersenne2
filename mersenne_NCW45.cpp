@@ -53,6 +53,8 @@ public:
 
 	Zp muli() const { return reduce(__uint128_t(_n) << 48); }	// sqrt(-1) = 2^48 (mod p)
 
+	Zp half() const { return Zp((_n % 2 == 0) ? _n / 2 : ((_n - 1) / 2 + (_p + 1) / 2)); }
+
 	Zp pow(const uint64_t e) const
 	{
 		if (e == 0) return Zp(1u);
@@ -127,20 +129,32 @@ private:
 
 		if (n % 5 == 0)
 		{
-			static const Zp K = Zp::primroot(5u), K2 = K * K;
+			static const Zp K = Zp::primroot(5u), K1 = K + Zp(1u), K2 = K * K;
+			static const Zp F2 = (K1 * K2).half(), F3 = K * K1, F4 = K * (K2 + Zp(1u)), F5 = (F3 + F4).half();
 
 			// Radix-5
 			for (size_t k = 0; k < n5; ++k)
 			{
 				const Zp u0 = x[k + 0 * n5], u1 = x[k + 1 * n5], u2 = x[k + 2 * n5], u3 = x[k + 3 * n5], u4 = x[k + 4 * n5];
-				// 20 add, 16 mul => 26 add, 10 mul
-				const Zp t14 = K * (u1 - u4), t23 = K * (u2 - u3);	// K^4 = -(1 + K + K^2 + K^3)
-				const Zp t12 = K2 * (u1 - u2), t13 = K2 * (u1 - u3), t24 = K2 * (u2 - u4), t34 = K2 * (u3 - u4);
-				x[k + 0 * n5] = u0 + u1 + u2 + u3 + u4;
-				x[k + 1 * n5] = (u0 - u4 +     t14 + t24 + K * t34) * w5[4 * k + 0];
-				x[k + 2 * n5] = (u0 - u2 +     t12 - t23 - K * t24) * w5[4 * k + 1];
-				x[k + 3 * n5] = (u0 - u3 + K * t13 + t23 -     t34) * w5[4 * k + 2];
-				x[k + 4 * n5] = (u0 - u1 - K * t12 - t13 -     t14) * w5[4 * k + 3];
+
+				// 20 mul, 20 add
+				// x[k + 0 * n5] = u0 + u1 + u2 + u3 + u4;
+				// x[k + 1 * n5] = (u0 + K  * u1 + K2 * u2 + K3 * u3 + K4 * u4) * w5[4 * k + 0];
+				// x[k + 2 * n5] = (u0 + K2 * u1 + K4 * u2 + K  * u3 + K3 * u4) * w5[4 * k + 1];
+				// x[k + 3 * n5] = (u0 + K3 * u1 + K  * u2 + K4 * u3 + K2 * u4) * w5[4 * k + 2];
+				// x[k + 4 * n5] = (u0 + K4 * u1 + K3 * u2 + K2 * u3 + K  * u4) * w5[4 * k + 3];
+
+				// 8 mul, 20 add
+				const Zp v1 = u1 + u4, v4 = u1 - u4, v2 = u2 + u3, v3 = u2 - u3;
+				const Zp z0 = v1 + v2;
+				const Zp x1 = u0, x2 = (v1 - v2) * F2, x3 = v3 * F3, x4 = v4 * F4, x5 = (v4 - v3) * F5;
+				const Zp y1 = x1 + x2, y2 = x1 - x2, y3 = x3 + x5, y4 = x4 - x5;
+				const Zp z1 = y1 + y4, z4 = y1 - y4, z2 = y2 + y3, z3 = y2 - y3;
+				x[k + 0 * n5] = z0 + u0;
+				x[k + 1 * n5] = (z2 - u4) * w5[4 * k + 0];
+				x[k + 2 * n5] = (z4 - u2) * w5[4 * k + 1];
+				x[k + 3 * n5] = (z1 - u3) * w5[4 * k + 2];
+				x[k + 4 * n5] = (z3 - u1) * w5[4 * k + 3];
 			}
 		}
 
@@ -193,21 +207,33 @@ private:
 
 		if (n % 5 == 0)
 		{
-			static const Zp K = Zp::primroot(5u), K2 = K * K;
+			static const Zp K = Zp::primroot(5u), K1 = K + Zp(1u), K2 = K * K;
+			static const Zp F2 = (K1 * K2).half(), F3 = K * K1, F4 = K * (K2 + Zp(1u)), F5 = (F3 + F4).half();
 
 			// Radix-5
 			for (size_t k = 0; k < n5; ++k)
 			{
-				const Zp u0 = x[k + 0 * n5], u1 = x[k + 1 * n5] * invw5[4 * k + 0], u2 = x[k + 2 * n5] * invw5[4 * k + 1];
-				const Zp u3 = x[k + 3 * n5] * invw5[4 * k + 2], u4 = x[k + 4 * n5] * invw5[4 * k + 3];
-				// 20 add, 16 mul => 26 add, 10 mul
-				const Zp t14 = K * (u1 - u4), t23 = K * (u2 - u3);	// K^4 = -(1 + K + K^2 + K^3)
-				const Zp t12 = K2 * (u1 - u2), t13 = K2 * (u1 - u3), t24 = K2 * (u2 - u4), t34 = K2 * (u3 - u4);
-				x[k + 0 * n5] = u0 + u1 + u2 + u3 + u4;
-				x[k + 1 * n5] = u0 - u1 - K * t12 - t13 -     t14;
-				x[k + 2 * n5] = u0 - u3 + K * t13 + t23 -     t34;
-				x[k + 3 * n5] = u0 - u2 +     t12 - t23 - K * t24;
-				x[k + 4 * n5] = u0 - u4 +     t14 + t24 + K * t34;
+				const Zp u0 = x[k + 0 * n5], u4 = x[k + 1 * n5] * invw5[4 * k + 0], u3 = x[k + 2 * n5] * invw5[4 * k + 1];
+				const Zp u2 = x[k + 3 * n5] * invw5[4 * k + 2], u1 = x[k + 4 * n5] * invw5[4 * k + 3];
+
+				// 16 mul, 20 add
+				// x[k + 0 * n5] = u0 + u1 + u2 + u3 + u4;
+				// x[k + 1 * n5] = u0 + K  * u1 + K2 * u2 + K3 * u3 + K4 * u4;
+				// x[k + 2 * n5] = u0 + K2 * u1 + K4 * u2 + K  * u3 + K3 * u4;
+				// x[k + 3 * n5] = u0 + K3 * u1 + K  * u2 + K4 * u3 + K2 * u4;
+				// x[k + 4 * n5] = u0 + K4 * u1 + K3 * u2 + K2 * u3 + K  * u4;
+
+				// 4 mul, 20 add
+				const Zp v1 = u1 + u4, v4 = u1 - u4, v2 = u2 + u3, v3 = u2 - u3;
+				const Zp z0 = v1 + v2;
+				const Zp x1 = u0, x2 = (v1 - v2) * F2, x3 = v3 * F3, x4 = v4 * F4, x5 = (v4 - v3) * F5;
+				const Zp y1 = x1 + x2, y2 = x1 - x2, y3 = x3 + x5, y4 = x4 - x5;
+				const Zp z1 = y1 + y4, z4 = y1 - y4, z2 = y2 + y3, z3 = y2 - y3;
+				x[k + 0 * n5] = z0 + u0;
+				x[k + 1 * n5] = z2 - u4;
+				x[k + 2 * n5] = z4 - u2;
+				x[k + 3 * n5] = z1 - u3;
+				x[k + 4 * n5] = z3 - u1;
 			}
 		}
 	}
