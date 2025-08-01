@@ -19,17 +19,26 @@ private:
 	uint64_t _n;
 
 	static const uint64_t _p = (((1ull << 32) - 1) << 32) + 1;	// 2^64 - 2^32 + 1
+	static const uint32_t _mp64 = uint32_t(-1);					// -p mod (2^64) = 2^32 - 1
 
 private:
 	Zp reduce(const __uint128_t t) const
 	{
 		const uint64_t hi = uint64_t(t >> 64), lo = uint64_t(t);
+		const uint32_t hi_lo = uint32_t(hi), hi_hi = uint32_t(hi >> 32);
 
-		// hih * 2^96 + hil * 2^64 + lo = lo + hil * 2^32 - (hih + hil)
-		Zp r = Zp((lo >= _p) ? lo - _p : lo);
-		r += Zp(hi << 32);				// lhs * rhs < p^2 => hi * 2^32 < p^2 / 2^32 < p.
-		r -= Zp((hi >> 32) + uint32_t(hi));
-		return r;
+		// Let X = hi_lo * (2^31 - 1) - hi_hi + lo = hi_hi * 2^96 + hi_lo * 2^64 + lo (mod p)
+		// The trick is to add 2^31 - 1 to X (Nick Craig-Wood, ARM-32 assembly code)
+		const uint32_t d = _mp64 - hi_hi;
+		const uint64_t s = ((uint64_t(hi_lo) << 32) - hi_lo) + d;	// No carry: 0 <= s <= (2^32 - 1)^2 + 2^32 - 1 = 2^64 - 2^32 < p
+		uint64_t r = s + lo;	// If carry then r + 2^64 = X + 2^32 - 1. We have r = X (mod p) and r < s < p
+		if (r >= s)				// No carry
+		{
+			// Subtract 2^31 - 1. If the difference is negative then add p (+p = -(-p))
+			const uint32_t c = (r < _mp64) ? _mp64 : 0;	// borrow
+			r -= _mp64; r -= c;
+		}
+		return Zp(r);
 	}
 
 public:
@@ -43,8 +52,8 @@ public:
 
 	bool operator!=(const Zp & rhs) const { return (_n != rhs._n); }
 
-	Zp & operator+=(const Zp & rhs) { const uint64_t c = (_n >= _p - rhs._n) ? _p : 0; _n += rhs._n; _n -= c; return *this; }
-	Zp & operator-=(const Zp & rhs) { const uint64_t c = (_n < rhs._n) ? _p : 0; _n -= rhs._n; _n += c; return *this; }
+	Zp & operator+=(const Zp & rhs) { const uint32_t c = (_n >= _p - rhs._n) ? _mp64 : 0; _n += rhs._n; _n += c; return *this; }
+	Zp & operator-=(const Zp & rhs) { const uint32_t c = (_n < rhs._n) ? _mp64 : 0; _n -= rhs._n; _n -= c; return *this; }
 	Zp & operator*=(const Zp & rhs) { *this = reduce(_n * __uint128_t(rhs._n)); return *this; }
 
 	Zp operator+(const Zp & rhs) const { Zp r = *this; r += rhs; return r; }
