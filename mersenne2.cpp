@@ -90,9 +90,9 @@ public:
 	GF61 operator-(const GF61 & rhs) const { return GF61(_s0 - rhs._s0, _s1 - rhs._s1); }
 	GF61 addconj(const GF61 & rhs) const { return GF61(_s0 + rhs._s0, _s1 - rhs._s1); }
 	GF61 subconj(const GF61 & rhs) const { return GF61(_s0 - rhs._s0, _s1 + rhs._s1); }
+	GF61 sub_conj(const GF61 & rhs) const { return GF61(_s0 - rhs._s0, rhs._s1 - _s1); }
 	GF61 addi(const GF61 & rhs) const { return GF61(_s0 - rhs._s1, _s1 + rhs._s0); }
 	GF61 subi(const GF61 & rhs) const { return GF61(_s0 + rhs._s1, _s1 - rhs._s0); }
-	GF61 subi_conj(const GF61 & rhs) const { return GF61(_s0 + rhs._s1, rhs._s0 - _s1); }
 
 	GF61 sqr() const { const Z61 t = _s0 * _s1; return GF61(_s0.sqr() - _s1.sqr(), t + t); }
 	GF61 mul(const GF61 & rhs) const { return GF61(_s0 * rhs._s0 - _s1 * rhs._s1, _s1 * rhs._s0 + _s0 * rhs._s1); }
@@ -197,9 +197,9 @@ public:
 	GF31 operator-(const GF31 & rhs) const { return GF31(_s0 - rhs._s0, _s1 - rhs._s1); }
 	GF31 addconj(const GF31 & rhs) const { return GF31(_s0 + rhs._s0, _s1 - rhs._s1); }
 	GF31 subconj(const GF31 & rhs) const { return GF31(_s0 - rhs._s0, _s1 + rhs._s1); }
+	GF31 sub_conj(const GF31 & rhs) const { return GF31(_s0 - rhs._s0, rhs._s1 - _s1); }
 	GF31 addi(const GF31 & rhs) const { return GF31(_s0 - rhs._s1, _s1 + rhs._s0); }
 	GF31 subi(const GF31 & rhs) const { return GF31(_s0 + rhs._s1, _s1 - rhs._s0); }
-	GF31 subi_conj(const GF31 & rhs) const { return GF31(_s0 + rhs._s1, rhs._s0 - _s1); }
 
 	GF31 sqr() const { const Z31 t = _s0 * _s1; return GF31(_s0.sqr() - _s1.sqr(), t + t); }
 	GF31 mul(const GF31 & rhs) const { return GF31(_s0 * rhs._s0 - _s1 * rhs._s1, _s1 * rhs._s0 + _s0 * rhs._s1); }
@@ -236,6 +236,7 @@ public:
 
 	Z61_31 operator+(const Z61_31 & rhs) const { return Z61_31(_n61 + rhs._n61, _n31 + rhs._n31); }
 	Z61_31 operator-(const Z61_31 & rhs) const { return Z61_31(_n61 - rhs._n61, _n31 - rhs._n31); }
+	Z61_31 operator*(const Z61_31 & rhs) const { return Z61_31(_n61 * rhs._n61, _n31 * rhs._n31); }
 
 	Z61_31 sqr() const { return Z61_31(_n61.sqr(), _n31.sqr()); }
 };
@@ -268,17 +269,17 @@ public:
 	const Z61_31 s0() const { return Z61_31(_n61.s0(), _n31.s0()); }
 	const Z61_31 s1() const { return Z61_31(_n61.s1(), _n31.s1()); }
 
-	// GF61_31 conj() const { return GF31(_s0, _s1.neg()); }
-	// GF61_31 muli() const { return GF31(_s1.neg(), _s0); }
-	// GF61_31 half() const { return GF31(_s0.half(), _s1.half()); }
+	// GF61_31 conj() const { return GF61_31(_n61.conj(), _n31.conj()); }
+	// GF61_31 muli() const { return GF61_31(_n61.muli(), _n31.muli()); }
+	// GF61_31 half() const { return GF61_31(_n61.half(), _n31.half()); }
 
 	GF61_31 operator+(const GF61_31 & rhs) const { return GF61_31(_n61 + rhs._n61, _n31 + rhs._n31); }
 	GF61_31 operator-(const GF61_31 & rhs) const { return GF61_31(_n61 - rhs._n61, _n31 - rhs._n31); }
 	GF61_31 addconj(const GF61_31 & rhs) const { return GF61_31(_n61.addconj(rhs._n61), _n31.addconj(rhs._n31)); }
 	GF61_31 subconj(const GF61_31 & rhs) const { return GF61_31(_n61.subconj(rhs._n61), _n31.subconj(rhs._n31)); }
+	GF61_31 sub_conj(const GF61_31 & rhs) const { return GF61_31(_n61.sub_conj(rhs._n61), _n31.sub_conj(rhs._n31)); }
 	GF61_31 addi(const GF61_31 & rhs) const { return GF61_31(_n61.addi(rhs._n61), _n31.addi(rhs._n31)); }
 	GF61_31 subi(const GF61_31 & rhs) const { return GF61_31(_n61.subi(rhs._n61), _n31.subi(rhs._n31)); }
-	GF61_31 subi_conj(const GF61_31 & rhs) const { return GF61_31(_n61.subi_conj(rhs._n61), _n31.subi_conj(rhs._n31)); }
 
 	GF61_31 sqr() const { return GF61_31(_n61.sqr(), _n31.sqr()); }
 	GF61_31 mul(const GF61_31 & rhs) const { return GF61_31(_n61.mul(rhs._n61), _n31.mul(rhs._n31)); }
@@ -437,13 +438,13 @@ private:
 	// IBDWT: restore the unweighted digits. sqr and backward transform must be divided by 4n
 	void unweight_norm() const
 	{
-		const uint8_t ln2 = _ln + 2;
+		const uint8_t ln1 = _ln + 1;
 		GF61_31 * const z = _z;
 		const IBWeight * const w_ib = _w_ib;
 
 		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k)
 		{
-			z[k] = z[k].rshift(w_ib[2 * k + 0] + ln2, w_ib[2 * k + 1] + ln2);
+			z[k] = z[k].rshift(w_ib[2 * k + 0] + ln1, w_ib[2 * k + 1] + ln1);
 		}
 	}
 
@@ -454,35 +455,22 @@ private:
 	// Output is recombined to produce the half-length transform (full length is not needed because of Hermitian symmetry).
 	void sqr() const
 	{
-		const size_t n_2 = _n / 2;
 		GF61_31 * const z = _z;
-		const GF61_31 * const w = &_w[_n];
+		const GF61_31 * const w = &_w[_n / 4];
 
-		const GF61_31 Z0 = z[0] + z[0];
-		const Z61_31 X0 = Z0.s0() + Z0.s1(), Xm0 = Z0.s0() - Z0.s1();
-		const Z61_31 X0sq = X0.sqr(), Xm0sq = Xm0.sqr();
-		z[0] = GF61_31(X0sq + Xm0sq, X0sq - Xm0sq);
+		const GF61_31 u = z[0] + z[0];
+		z[0] = GF61_31(u.s0().sqr() + u.s1().sqr(), u.s0() * (u.s1() + u.s1()));
+		z[1] = (z[1] + z[1]).sqr();
 
-		const GF61_31 zn_4 = z[1] + z[1];
-		const GF61_31 Zn_4 = zn_4.sqr();
-		z[1] = Zn_4 + Zn_4;
-
-		for (size_t k = 2; k < n_2; k += 2)
+		for (size_t j = 1, n_4 = _n / 4; j < n_4; ++j)
 		{
-			const GF61_31 wk = w[k / 2];
-
-			// const size_t j = bitrev(k, n_2), mk = bitrev(n_2 - j, n_2);
-			const size_t mk = (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1;
+			const GF61_31 wk2 = w[j];
+			// const size_t k = 2 * j, kr = bitrev(k, _n / 2), mk = bitrev(_n / 2 - kr, _n / 2);
+			const size_t k = 2 * j, mk = (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1;
 			const GF61_31 zk = z[k], zmk = z[mk];
-
-			const GF61_31 Zek = zk.addconj(zmk), Zok = zk.subconj(zmk).mul(wk);
-			const GF61_31 Zk = Zek.subi(Zok), Zmk = Zek.addi(Zok);
-
-			const GF61_31 Zk2 = Zk.sqr(), Zmk2 = Zmk.sqr();
-
-			const GF61_31 Zek2 = Zk2 + Zmk2, Zok2 = (Zk2 - Zmk2).mulconj(wk);
-			const GF61_31 zk2 =  Zek2.addi(Zok2), zmk2 = Zek2.subi_conj(Zok2);
-
+			const GF61_31 u0 = zk.addconj(zmk), u1 = zk.subconj(zmk);
+			const GF61_31 v0 = u0.sqr() - u1.sqr().mul(wk2), v1 = u0.mul(u1 + u1);
+			const GF61_31 zk2 = v0 + v1, zmk2 = v0.sub_conj(v1);
 			z[k] = zk2; z[mk] = zmk2;
 		}
 	}
@@ -548,7 +536,7 @@ private:
 
 public:
 	mersenne(const uint32_t q) : _ln(transformsize(q)), _n(size_t(1) << _ln),
-		_z(new GF61_31[_n / 2]), _w(new GF61_31[5 * _n / 4]), _w_ib(new IBWeight[_n]), _digit_width(new uint8_t[_n])
+		_z(new GF61_31[_n / 2]), _w(new GF61_31[_n]), _w_ib(new IBWeight[_n]), _digit_width(new uint8_t[_n])
 	{
 		const uint8_t ln = _ln;
 		const size_t n = _n;
@@ -566,10 +554,6 @@ public:
 		{
 			for (size_t j = 0; j < s; ++j) w[n / 2 + s + j] = w[s + j].mul(w[2 * (s + j)]);
 		}
-
-		// n values in GF(p) and a transform of length n/2 in GF(p^2) 
-		const GF61_31 r_n = GF61_31::root_one(n);
-		for (size_t j = 0, s = n / 4; j < s; ++j) w[n + j] = r_n.pow(bitrev(j, s));
 
 		// IBDWT weights: x^q - 1 => x^n - 1
 		// See Richard Crandall, Barry Fagin, "Discrete weighted transforms and large-integer arithmetic", Math. Comp. 62 (1994), 305-324.
@@ -677,7 +661,11 @@ public:
 	{
 		const GF61_31 * const z = _z;
 
-		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k) if (z[k].s0().n61().get() != 0u) return false;
+		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k)
+		{
+			if (z[k].s0().n31().get() != 0u) return false;
+			if (z[k].s1().n31().get() != 0u) return false;
+		}
 		return true;
 	}
 
@@ -688,9 +676,9 @@ public:
 
 		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k)
 		{
-			const uint64_t n0 = z[k].s0().n61().get();
+			const uint32_t n0 = z[k].s0().n31().get();
 			if (n0 != (uint64_t(1) << digit_width[2 * k + 0]) - 1) return false;
-			const uint64_t n1 = z[k].s1().n61().get();
+			const uint32_t n1 = z[k].s1().n31().get();
 			if (n1 != (uint64_t(1) << digit_width[2 * k + 1]) - 1) return false;
 		}
 
