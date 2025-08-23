@@ -109,7 +109,7 @@ public:
 		return r.mul(y);
 	}
 
-	static const GF61 root_one(const size_t n) { return GF61(Z61(_h_0), Z61(_h_1)).pow(_h_order / n); }
+	static const GF61 root_nth(const size_t n) { return GF61(Z61(_h_0), Z61(_h_1)).pow(_h_order / n); }
 	static uint8_t log2_root_two(const size_t n) { return uint8_t(((uint64_t(1) << 60) / n) % 61); }
 };
 
@@ -216,7 +216,7 @@ public:
 		return r.mul(y);
 	}
 
-	static const GF31 root_one(const size_t n) { return GF31(Z31(_h_0), Z31(_h_1)).pow(_h_order / n); }
+	static const GF31 root_nth(const size_t n) { return GF31(Z31(_h_0), Z31(_h_1)).pow(_h_order / n); }
 	static uint8_t log2_root_two(const size_t n) { return uint8_t(((uint64_t(1) << 30) / n) % 31); }
 };
 
@@ -290,7 +290,7 @@ public:
 
 	GF61_31 pow(const uint64_t e) const { return GF61_31(_n61.pow(e), _n31.pow(e)); }
 
-	static const GF61_31 root_one(const size_t n) { return GF61_31(GF61::root_one(n), GF31::root_one(n)); }
+	static const GF61_31 root_nth(const size_t n) { return GF61_31(GF61::root_nth(n), GF31::root_nth(n)); }
 
 	// Chinese remainder theorem
 	void garner(__uint128_t & n_0, __uint128_t & n_1) const
@@ -435,7 +435,7 @@ private:
 		}
 	}
 
-	// IBDWT: restore the unweighted digits. sqr and backward transform must be divided by 4n
+	// IBDWT: restore the unweighted digits. sqr and backward transform must be divided by 2n
 	void unweight_norm() const
 	{
 		const uint8_t ln1 = _ln + 1;
@@ -470,8 +470,7 @@ private:
 			const GF61_31 zk = z[k], zmk = z[mk];
 			const GF61_31 u0 = zk.addconj(zmk), u1 = zk.subconj(zmk);
 			const GF61_31 v0 = u0.sqr() - u1.sqr().mul(wk2), v1 = u0.mul(u1 + u1);
-			const GF61_31 zk2 = v0 + v1, zmk2 = v0.sub_conj(v1);
-			z[k] = zk2; z[mk] = zmk2;
+			z[k] = v0 + v1; z[mk] = v0.sub_conj(v1);
 		}
 	}
 
@@ -545,7 +544,7 @@ public:
 		GF61_31 * const w = _w;
 		for (size_t s = 1; s <= n / 4; s *= 2)
 		{
-			const GF61_31 r_s = GF61_31::root_one(2 * s);
+			const GF61_31 r_s = GF61_31::root_nth(2 * s);
 			for (size_t j = 0; j < s; ++j) w[s + j] = r_s.pow(bitrev(j, s));
 		}
 
