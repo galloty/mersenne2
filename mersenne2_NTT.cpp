@@ -76,7 +76,9 @@ private:
 
 public:
 	GF61() {}
+	explicit GF61(const Z61 & s0) : _s0(s0), _s1(0) {}
 	explicit GF61(const Z61 & s0, const Z61 & s1) : _s0(s0), _s1(s1) {}
+	explicit GF61(const uint64_t n0) : _s0(n0), _s1(0) {}
 	explicit GF61(const uint64_t n0, const uint64_t n1) : _s0(n0), _s1(n1) {}
 
 	const Z61 & s0() const { return _s0; }
@@ -112,8 +114,8 @@ GF61 sqr() const { const Z61 t = _s0 * _s1; return GF61(_s0.sqr() - _s1.sqr(), t
 
 	GF61 pow(const uint64_t e) const
 	{
-		if (e == 0) return GF61(1u, 0u);
-		GF61 r = GF61(1u, 0u), y = *this;
+		if (e == 0) return GF61(1);
+		GF61 r = GF61(1), y = *this;
 		for (uint64_t i = e; i != 1; i /= 2) { if (i % 2 != 0) r = r.mul(y); y = y.sqr(); }
 		return r.mul(y);
 	}
@@ -422,23 +424,24 @@ private:
 	{
 		GF61 * const z = _z;
 		const GF61 * const w = _w;
-		const size_t n_4 = _n / 4;
+		const size_t n_2 = _n / 2, n_4 = _n / 4;
 
-		const GF61 u = z[0] + z[0];
-		z[0] = GF61(u.s0().sqr() + u.s1().sqr(), u.s0() * (u.s1() + u.s1()));
-		z[n_4] = (z[n_4] + z[n_4]).sqr();
+		// const GF61 u = z[0] + z[0];
+		// z[0] = GF61(u.s0().sqr() + u.s1().sqr(), u.s0() * (u.s1() + u.s1()));
+		// z[n_4] = (z[n_4] + z[n_4]).sqr();
 
-		for (size_t j = 1, mj = _n / 2 - 1; j < n_4; ++j, --mj)
+		for (size_t j = 0, mj = n_2 - j; j <= n_4; ++j, --mj)
 		{
-			const GF61 w2 = w[j];
-			const GF61 zj = z[j], zmj = z[mj];
+			const size_t mj_n = mj & (n_2 - 1);
+			GF61 zj = z[j], zmj = z[mj_n];
+			if (j == n_4) zmj = zmj.conj();
 			const GF61 u0 = zj.addconj(zmj), u1 = zj.subconj(zmj);
 #ifdef RIGHT_HANDED
-			const GF61 v0 = u0.sqr() - u1.sqr().mulconj(w2), v1 = u0.mul(u1 + u1);
+			const GF61 v0 = u0.sqr() - u1.sqr().mulconj(w[j]), v1 = u0.mul(u1 + u1);
 #else
-			const GF61 v0 = u0.sqr() - u1.sqr().mul(w2), v1 = u0.mul(u1 + u1);
+			const GF61 v0 = u0.sqr() - u1.sqr().mul(w[j]), v1 = u0.mul(u1 + u1);
 #endif
-			z[j] = v0 + v1; z[mj] = v0.sub_conj(v1);
+			z[mj_n] = v0.sub_conj(v1); z[j] = v0 + v1;	// It must be mj_n first because z[n_4] = v0 + v1 != v0.sub_conj(v1)
 		}
 	}
 
@@ -488,7 +491,7 @@ public:
 		const GF61 r = GF61::root_nth(n / 2);
 
 		// Radix-2 twiddle factors
-		GF61 rj = GF61(1, 0);
+		GF61 rj = GF61(1);
 		for (size_t j = 0; j < n / 4; ++j) { w[j] = rj; rj = rj.mul(r); }
 
 		// IBDWT weights: x^q - 1 => x^n - 1
@@ -548,8 +551,8 @@ public:
 	{
 		GF61 * const z = _z;
 
-		z[0] = GF61(a, 0);
-		for (size_t k = 1, n_2 = _n / 2; k < n_2; ++k) z[k] = GF61(0, 0);
+		z[0] = GF61(a);
+		for (size_t k = 1, n_2 = _n / 2; k < n_2; ++k) z[k] = GF61(0);
 	}
 
 	void square() const
