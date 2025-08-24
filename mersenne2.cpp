@@ -458,19 +458,16 @@ private:
 		GF61_31 * const z = _z;
 		const GF61_31 * const w = &_w[_n / 4];
 
-		const GF61_31 u = z[0] + z[0];
-		z[0] = GF61_31(u.s0().sqr() + u.s1().sqr(), u.s0() * (u.s1() + u.s1()));
-		z[1] = (z[1] + z[1]).sqr();
-
-		for (size_t j = 1, n_4 = _n / 4; j < n_4; ++j)
+		for (size_t j = 0, n_4 = _n / 4; j < n_4; ++j)
 		{
-			const GF61_31 wk2 = w[j];
 			// const size_t k = 2 * j, kr = bitrev(k, _n / 2), mk = bitrev(_n / 2 - kr, _n / 2);
-			const size_t k = 2 * j, mk = (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1;
+			const size_t k = 2 * j, mk = (k != 0) ? (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1 : 0;
 			const GF61_31 zk = z[k], zmk = z[mk];
 			const GF61_31 u0 = zk.addconj(zmk), u1 = zk.subconj(zmk);
-			const GF61_31 v0 = u0.sqr() - u1.sqr().mul(wk2), v1 = u0.mul(u1 + u1);
-			z[k] = v0 + v1; z[mk] = v0.sub_conj(v1);
+			const GF61_31 v0 = u0.sqr() - u1.sqr().mul(w[j]), v1 = u0.mul(u1 + u1);
+			z[k] = v0 + v1;
+			if (k == 0) z[1] = (z[1] + z[1]).sqr();
+			else z[mk] = v0.sub_conj(v1);
 		}
 	}
 

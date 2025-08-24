@@ -426,22 +426,19 @@ private:
 		const GF61 * const w = _w;
 		const size_t n_2 = _n / 2, n_4 = _n / 4;
 
-		// const GF61 u = z[0] + z[0];
-		// z[0] = GF61(u.s0().sqr() + u.s1().sqr(), u.s0() * (u.s1() + u.s1()));
-		// z[n_4] = (z[n_4] + z[n_4]).sqr();
-
-		for (size_t j = 0, mj = n_2 - j; j <= n_4; ++j, --mj)
+		for (size_t j = 0; j < n_4; ++j)
 		{
-			const size_t mj_n = mj & (n_2 - 1);
-			GF61 zj = z[j], zmj = z[mj_n];
-			if (j == n_4) zmj = zmj.conj();
+			const size_t mj = (n_2 - j) & (n_2 - 1);
+			GF61 zj = z[j], zmj = z[mj];
 			const GF61 u0 = zj.addconj(zmj), u1 = zj.subconj(zmj);
 #ifdef RIGHT_HANDED
 			const GF61 v0 = u0.sqr() - u1.sqr().mulconj(w[j]), v1 = u0.mul(u1 + u1);
 #else
 			const GF61 v0 = u0.sqr() - u1.sqr().mul(w[j]), v1 = u0.mul(u1 + u1);
 #endif
-			z[mj_n] = v0.sub_conj(v1); z[j] = v0 + v1;	// It must be mj_n first because z[n_4] = v0 + v1 != v0.sub_conj(v1)
+			z[j] = v0 + v1;
+			if (j == 0) z[n_4] = (z[n_4] + z[n_4]).sqr();
+			else z[mj] = v0.sub_conj(v1);
 		}
 	}
 
