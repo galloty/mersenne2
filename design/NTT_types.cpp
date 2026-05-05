@@ -627,9 +627,9 @@ public:
 
 		for (size_t k = 0, n_2 = _n / 2; k < n_2; ++k)
 		{
-			const uint32_t n0 = z[k].s0().get();
+			const uint64_t n0 = z[k].s0().get();
 			if (n0 != (uint64_t(1) << digit_width[2 * k + 0]) - 1) return false;
-			const uint32_t n1 = z[k].s1().get();
+			const uint64_t n1 = z[k].s1().get();
 			if (n1 != (uint64_t(1) << digit_width[2 * k + 1]) - 1) return false;
 		}
 
