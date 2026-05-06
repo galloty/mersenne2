@@ -7,7 +7,6 @@ Please give feedback to the authors if improvement is realized. It is distribute
 
 #include <cstdint>
 #include <iostream>
-#include <cstdlib>
 #include <ctime>
 
 // a finite field
@@ -64,11 +63,11 @@ static constexpr size_t bitrev(const size_t i, const size_t n)
 
 static void forward2(GF * const z, const size_t m, const size_t s)
 {
-	const GF ws = GF::root_nth(6 * s);
+	const GF ws = GF::root_nth(2 * s);
 
 	for (size_t j = 0; j < s; ++j)
 	{
-		const GF wj = ws.pow(3 * bitrev(j, s) + 1);
+		const GF wj = ws.pow(bitrev(j, s));
 		for (size_t i = 0; i < m; ++i)
 		{
 			const size_t k = 2 * m * j + i;
@@ -80,11 +79,11 @@ static void forward2(GF * const z, const size_t m, const size_t s)
 
 static void backward2(GF * const z, const size_t m, const size_t s)
 {
-	const GF wsi = GF::root_nth(6 * s).invert(), inv2 = GF(2).invert();
+	const GF wsi = GF::root_nth(2 * s).invert(), inv2 = GF(2).invert();
 
 	for (size_t j = 0; j < s; ++j)
 	{
-		const GF wji = wsi.pow(3 * bitrev(j, s) + 1);
+		const GF wji = wsi.pow(bitrev(j, s));
 
 		for (size_t i = 0; i < m; ++i)
 		{
@@ -104,9 +103,9 @@ static void forward3(GF * const z, const size_t m)
 	for (size_t i = 0; i < m; ++i)
 	{
 		const GF u0 = z[i + 0 * m], u1 = z[i + 1 * m], u2 = z[i + 2 * m];
-		z[i + 0 * m] =  u0 +   J * u1 + J2 * u2;
-		z[i + 1 * m] = (u0 +  J2 * u1 +  J * u2) * rm.pow(1 * i);
-		z[i + 2 * m] = (u0 +       u1 +      u2) * rm.pow(2 * i);
+		z[i + 0 * m] = (u0 +       u1 +      u2);
+		z[i + 1 * m] = (u0 +   J * u1 + J2 * u2) * rm.pow(1 * i);
+		z[i + 2 * m] = (u0 +  J2 * u1 +  J * u2) * rm.pow(2 * i);
 	}
 }
 
@@ -118,9 +117,9 @@ static void backward3(GF * const z, const size_t m)
 	for (size_t i = 0; i < m; ++i)
 	{
 		const GF u0 = z[i + 0 * m], u1 = z[i + 1 * m] * rmi.pow(1 * i), u2 = z[i + 2 * m] * rmi.pow(2 * i);
-		z[i + 0 * m] = (     u0 +      u1 + u2) * inv3;
-		z[i + 1 * m] = (J2 * u0 +  J * u1 + u2) * inv3;
-		z[i + 2 * m] = ( J * u0 + J2 * u1 + u2) * inv3;
+		z[i + 0 * m] = (u0 +      u1 +      u2) * inv3;
+		z[i + 1 * m] = (u0 + J2 * u1 +  J * u2) * inv3;
+		z[i + 2 * m] = (u0 +  J * u1 + J2 * u2) * inv3;
 	}
 }
 
@@ -164,7 +163,7 @@ int main()
 {
 	std::srand((unsigned int)(std::time(nullptr)));
 
-	const size_t m = 1 << 10, n = 3 * m;
+	const size_t m = 1 << 12, n = 3 * m;
 	GF z[n]; for (size_t i = 0; i < n; ++i) z[i] = GF(uint64_t(std::rand()) % 1000u);
 
 	GF zs[n]; square_slow(zs, z, n);

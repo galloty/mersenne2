@@ -7,7 +7,6 @@ Please give feedback to the authors if improvement is realized. It is distribute
 
 #include <cstdint>
 #include <iostream>
-#include <cstdlib>
 #include <ctime>
 
 // a finite field
@@ -58,7 +57,7 @@ static void square2(GF * const P, const size_t m, const size_t s, const size_t j
 {
 	if (m == 1) { P[0] *= P[0]; return; } 	// P is a scalar
 
-	const GF r = GF::root_nth(2 * s).pow(j + 1), ri = r.invert(), inv2 = GF(2).invert();
+	const GF r = GF::root_nth(2 * s).pow(j), ri = r.invert(), inv2 = GF(2).invert();
 
 	GF * const P0 = &P[0 * m / 2]; GF * const P1 = &P[1 * m / 2];
 
@@ -87,9 +86,9 @@ static void square3twisted(GF * const P, const size_t m)
 	for (size_t i = 0; i < m / 3; ++i)
 	{
 		const GF u0 = P0[i], u1 = P1[i], u2 = P2[i];
-		P0[i] =  u0 +   J * u1 + J2 * u2;
-		P1[i] = (u0 +  J2 * u1 +  J * u2) * rm.pow(1 * i);	// twist
-		P2[i] = (u0 +       u1 +      u2) * rm.pow(2 * i);	// twist
+		P0[i] = (u0 +       u1 +      u2);
+		P1[i] = (u0 +   J * u1 + J2 * u2) * rm.pow(1 * i);	// twist
+		P2[i] = (u0 +  J2 * u1 +  J * u2) * rm.pow(2 * i);	// twist
 	}
 
 	square2(P0, m / 3, 3, 0); square2(P1, m / 3, 3, 0); square2(P2, m / 3, 3, 0);
@@ -97,9 +96,9 @@ static void square3twisted(GF * const P, const size_t m)
 	for (size_t i = 0; i < m / 3; ++i)
 	{
 		const GF u0 = P0[i], u1 = P1[i] * rmi.pow(1 * i), u2 = P2[i] * rmi.pow(2 * i);	// untwist
-		P0[i] = (     u0 +      u1 + u2) * inv3;
-		P1[i] = (J2 * u0 +  J * u1 + u2) * inv3;
-		P2[i] = ( J * u0 + J2 * u1 + u2) * inv3;
+		P0[i] = (u0 +      u1 +      u2) * inv3;
+		P1[i] = (u0 + J2 * u1 +  J * u2) * inv3;
+		P2[i] = (u0 +  J * u1 + J2 * u2) * inv3;
 	}
 }
 
