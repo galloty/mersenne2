@@ -15,7 +15,6 @@ class GF
 private:
 	uint64_t n;
 
-public:
 	static const uint64_t _p = 3 * (uint64_t(1) << 41) + 1;
 	static const uint64_t _primroot = 5;
 
@@ -123,16 +122,16 @@ static void backward3(GF * const z, const size_t m)
 	}
 }
 
-static void sqr(GF * const P, const size_t n)
+static void sqr(GF * const z, const size_t n)
 {
-	for (size_t k = 0; k < n; ++k) P[k] *= P[k];
+	for (size_t k = 0; k < n; ++k) z[k] *= z[k];
 }
 
-static void square2(GF * const P, const size_t n)
+static void square2(GF * const z, const size_t n)
 {
-	for (size_t m = n / 2, s = 1; m >= 1; m /= 2, s *= 2) forward2(P, m, s);
-	sqr(P, n);
-	for (size_t m = 1, s = n / 2; s >= 1; m *= 2, s /= 2) backward2(P, m, s);
+	for (size_t m = n / 2, s = 1; m >= 1; m /= 2, s *= 2) forward2(z, m, s);
+	sqr(z, n);
+	for (size_t m = 1, s = n / 2; s >= 1; m *= 2, s /= 2) backward2(z, m, s);
 }
 
 // Q = P^2 mod x^n - 1
@@ -164,17 +163,15 @@ int main()
 	std::srand((unsigned int)(std::time(nullptr)));
 
 	const size_t m = 1 << 12, n = 3 * m;
-	GF z[n]; for (size_t i = 0; i < n; ++i) z[i] = GF(uint64_t(std::rand()) % 1000u);
+	GF P[n]; for (size_t i = 0; i < n; ++i) P[i] = GF(uint64_t(std::rand()) % 1000u);
 
-	GF zs[n]; square_slow(zs, z, n);
+	GF Q[n]; square_slow(Q, P, n);
 
-	forward3(z, m);
+	forward3(P, m);
+	square2(&P[0 * m], m); square2(&P[1 * m], m); square2(&P[2 * m], m);
+	backward3(P, m);
 
-	square2(&z[0 * m], m); square2(&z[1 * m], m); square2(&z[2 * m], m);
-
-	backward3(z, m);
-
-	check(z, zs, n);
+	check(P, Q, n);
 
 	return EXIT_SUCCESS;
 }

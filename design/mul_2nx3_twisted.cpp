@@ -52,56 +52,58 @@ public:
 	static const GF root_nth(const size_t n) { return GF(_primroot).pow((_p - 1) / n); }
 };
 
-static void square2twisted(GF * const P, const size_t m)
+static void square3(GF * const P)
 {
-	if (m == 1) { P[0] *= P[0]; return; } 	// P is a scalar
+	static const GF J = GF::root_nth(3), J2 = J * J, inv3 = GF(3).invert();
 
-	const GF rm = GF::root_nth(m), rmi = rm.invert(), inv2 = GF(2).invert();
- 
-	GF * const P0 = &P[0 * m / 2]; GF * const P1 = &P[1 * m / 2];
+	const GF u0 = P[0], u1 = P[1], u2 = P[2];
+	GF v0 = (u0 +       u1 +      u2);
+	GF v1 = (u0 +   J * u1 + J2 * u2);
+	GF v2 = (u0 +  J2 * u1 +  J * u2);
+	v0 *= v0; v1 *= v1; v2 *= v2;
+	P[0] = (v0 +      v1 +      v2) * inv3;
+	P[1] = (v0 + J2 * v1 +  J * v2) * inv3;
+	P[2] = (v0 +  J * v1 + J2 * v2) * inv3;
 
-	for (size_t i = 0; i < m / 2; ++i)
+	// const GF c = P[0], b = P[1], a = P[2];
+	// P[0] = (a * b) * 2 + c * c;
+	// P[1] = (b * c) * 2 + a * a;
+	// P[2] = (c * a) * 2 + b * b;
+}
+
+static void forward2(GF * const z, const size_t m, const size_t s)
+{
+	const GF wm = GF::root_nth(2 * m);
+
+	for (size_t j = 0; j < s; ++j)
 	{
-		const GF u0 = P0[i], u1 = P1[i];
-		P0[i] = u0 + u1;
-		// R1 = x^{m/2} + r, P1 must be twisted such that R1' = x^{m/2} - r
-		P1[i] = (u0 - u1) * rm.pow(i);
-	}
-
-	square2twisted(P0, m / 2); square2twisted(P1, m / 2);
-
-	for (size_t i = 0; i < m / 2; ++i)
-	{
-		const GF u0 = P0[i], u1 = P1[i] * rmi.pow(i);	// untwist;
-		P0[i] = (u1 + u0) * inv2;
-		P1[i] = (u0 - u1) * inv2;
+		for (size_t i = 0; i < m; ++i)
+		{
+			const size_t k = 2 * m * j + i;
+			const GF u0 = z[k + 0 * m], u1 = z[k + 1 * m];
+			z[k + 0 * m] = u0 + u1; z[k + 1 * m] = (u0 - u1) * wm.pow(i);;
+		}
 	}
 }
 
-static void square3twisted(GF * const P, const size_t m)
+static void backward2(GF * const z, const size_t m, const size_t s)
 {
-	static const GF J = GF::root_nth(3), J2 = J * J, inv3 = GF(3).invert();
-	const GF rm = GF::root_nth(m), rmi = rm.invert();
+	const GF wmi = GF::root_nth(2 * m).invert(), inv2 = GF(2).invert();
 
-	GF * const P0 = &P[0 * m / 3]; GF * const P1 = &P[1 * m / 3]; GF * const P2 = &P[2 * m / 3];
-
-	for (size_t i = 0; i < m / 3; ++i)
+	for (size_t j = 0; j < s; ++j)
 	{
-		const GF u0 = P0[i], u1 = P1[i], u2 = P2[i];
-		P0[i] = (u0 +       u1 +      u2);
-		P1[i] = (u0 +   J * u1 + J2 * u2) * rm.pow(1 * i);	// twist
-		P2[i] = (u0 +  J2 * u1 +  J * u2) * rm.pow(2 * i);	// twist
+		for (size_t i = 0; i < m; ++i)
+		{
+			const size_t k = 2 * m * j + i;
+			const GF u0 = z[k + 0 * m], u1 = z[k + 1 * m] * wmi.pow(i);
+			z[k + 0 * m] = (u0 + u1) * inv2; z[k + 1 * m] = (u0 - u1) * inv2;
+		}
 	}
+}
 
-	square2twisted(P0, m / 3); square2twisted(P1, m / 3); square2twisted(P2, m / 3);
-
-	for (size_t i = 0; i < m / 3; ++i)
-	{
-		const GF u0 = P0[i], u1 = P1[i] * rmi.pow(1 * i), u2 = P2[i] * rmi.pow(2 * i);	// untwist
-		P0[i] = (u0 +      u1 +      u2) * inv3;
-		P1[i] = (u0 + J2 * u1 +  J * u2) * inv3;
-		P2[i] = (u0 +  J * u1 + J2 * u2) * inv3;
-	}
+static void sqr(GF * const z, const size_t m)
+{
+	for (size_t i = 0; i < m; ++i) square3(&z[3 * i]);
 }
 
 // Q = P^2 mod x^n - 1
@@ -137,7 +139,9 @@ int main()
 
 	GF Q[n]; square_slow(Q, P, n);
 
-	square3twisted(P, n);
+	for (size_t m = n / 2, s = 1; m >= 3; m /= 2, s *= 2) forward2(P, m, s);
+	sqr(P, n / 3);
+	for (size_t m = 3, s = n / 6; s >= 1; m *= 2, s /= 2) backward2(P, m, s);
 
 	check(P, Q, n);
 

@@ -15,7 +15,6 @@ class GF
 private:
 	uint64_t n;
 
-public:
 	static const uint64_t _p = 3 * (uint64_t(1) << 41) + 1;
 	static const uint64_t _primroot = 5;
 
@@ -130,7 +129,7 @@ int main()
 {
 	std::srand((unsigned int)(std::time(nullptr)));
 
-	const size_t n = 3 * (1 << 12);
+	const size_t n = 3 << 12;
 	GF P[n]; for (size_t i = 0; i < n; ++i) P[i] = GF(uint64_t(std::rand()) % 1000u);
 
 	GF Q[n]; square_slow(Q, P, n);
