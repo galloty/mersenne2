@@ -52,17 +52,19 @@ public:
 	static const GF root_nth(const size_t n) { return GF(_primroot).pow((_p - 1) / n); }
 };
 
+static const GF J = GF::root_nth(3), inv2 = GF(2).invert(), inv3 = GF(3).invert();
+
 static void square2(GF * const P, const size_t m, const size_t s, const size_t j)
 {
 	if (m == 1) { P[0] *= P[0]; return; } 	// P is a scalar
 
-	const GF r = GF::root_nth(2 * s).pow(j), ri = r.invert(), inv2 = GF(2).invert();
+	const GF r2s = GF::root_nth(2 * s).pow(j), r2si = r2s.invert();
 
 	GF * const P0 = &P[0 * m / 2]; GF * const P1 = &P[1 * m / 2];
 
 	for (size_t i = 0; i < m / 2; ++i)
 	{
-		const GF u0 = P0[i], u1 = r * P1[i];
+		const GF u0 = P0[i], u1 = r2s * P1[i];
 		P0[i] = u0 + u1; P1[i] = u0 - u1;
 	}
 
@@ -71,13 +73,13 @@ static void square2(GF * const P, const size_t m, const size_t s, const size_t j
 	for (size_t i = 0; i < m / 2; ++i)
 	{
 		const GF u0 = P0[i], u1 = P1[i];
-		P0[i] = (u1 + u0) * inv2; P1[i] = (u0 - u1) * ri * inv2;
+		P0[i] = (u1 + u0) * inv2; P1[i] = (u0 - u1) * r2si * inv2;
 	}
 }
 
 static void square3twisted(GF * const P, const size_t m)
 {
-	static const GF J = GF::root_nth(3), J2 = J * J, inv3 = GF(3).invert();
+	const GF J2 = J * J;
 	const GF rm = GF::root_nth(m), rmi = rm.invert();
 
 	GF * const P0 = &P[0 * m / 3]; GF * const P1 = &P[1 * m / 3]; GF * const P2 = &P[2 * m / 3];
@@ -102,23 +104,23 @@ static void square3twisted(GF * const P, const size_t m)
 }
 
 // Q = P^2 mod x^n - 1
-static void square_slow(GF * const Q, const GF * const P, const size_t n)
+static void square_slow(uint64_t * const Q, const uint64_t * const P, const size_t n)
 {
 	for (size_t j = 0; j < n; ++j)
 	{
-		GF l = 0; for (size_t i = 0; i <= j; ++i) l += P[i] * P[j - i];
-		GF h = 0; for (size_t i = j + 1; i < n; ++i) h += P[i] * P[j - i + n];
+		uint64_t l = 0; for (size_t i = 0; i <= j; ++i) l += P[i] * P[j - i];
+		uint64_t h = 0; for (size_t i = j + 1; i < n; ++i) h += P[i] * P[j - i + n];
 		Q[j] = l + h;
 	}
 }
 
-inline void check(const GF * const P, const GF * const Q, const size_t n)
+inline void check(const uint64_t * const P, const uint64_t * const Q, const size_t n)
 {
 	bool error = false;
 	uint64_t a_max = 0;
 	for (size_t i = 0; i < n; ++i)
 	{
-		const uint64_t a = P[i].get(), b = Q[i].get();
+		const uint64_t a = P[i], b = Q[i];
 		if (a != b) { error = true; std::cout << i << ": " << a << " != " << b << std::endl; }
 		a_max = std::max(a_max, a);
 	}
@@ -130,11 +132,15 @@ int main()
 	std::srand((unsigned int)(std::time(nullptr)));
 
 	const size_t n = 3 << 12;
-	GF P[n]; for (size_t i = 0; i < n; ++i) P[i] = GF(uint64_t(std::rand()) % 1000u);
+	uint64_t P[n], Q[n];
+	for (size_t i = 0; i < n; ++i) P[i] = uint64_t(std::rand()) % 1000u;
 
-	GF Q[n]; square_slow(Q, P, n);
+	square_slow(Q, P, n);
 
-	square3twisted(P, n);
+	GF R[n];
+	for (size_t i = 0; i < n; ++i) R[i] = GF(P[i]);
+	square3twisted(R, n);
+	for (size_t i = 0; i < n; ++i) P[i] = R[i].get();
 
 	check(P, Q, n);
 
