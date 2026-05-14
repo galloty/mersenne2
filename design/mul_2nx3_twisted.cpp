@@ -138,7 +138,7 @@ int main()
 
 	const size_t n = 3 << 12;
 	uint64_t P[n], Q[n];
-	 for (size_t i = 0; i < n; ++i) P[i] = uint64_t(std::rand()) % 1000u;
+	for (size_t i = 0; i < n; ++i) P[i] = uint64_t(std::rand()) % 1000u;
 
 	square_slow(Q, P, n);
 

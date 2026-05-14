@@ -52,9 +52,11 @@ public:
 	}
 
 	Z61 invert() const { return pow(_p - 2); }
+
+	static const Z61 root_nth(const size_t n) { return Z61(_primroot).pow((_p - 1) / n); }
 };
 
-static const Z61 inv2 = Z61(2).invert();
+static const Z61 J = Z61::root_nth(3), inv2 = Z61(2).invert(), inv3 = Z61(3).invert();
 
 // GF((2^61 - 1)^2): the prime field of order p^2, p = 2^61 - 1
 class GF61
@@ -100,15 +102,12 @@ public:
 	static const GF61 root_nth(const size_t n) { return GF61(Z61(_h_0), Z61(_h_1)).pow(_h_order / n); }
 };
 
-// Bit-reversed permutation
-static void scramble(GF61 * const z, const size_t n)
+// bit-reversal permutation of index i for a sequence of n items
+static constexpr size_t bitrev(const size_t i, const size_t n)
 {
-	for (size_t i = 0, j = 0; i < n - 1; ++i)
-	{
-		if (i < j) std::swap(z[i], z[j]);
-		size_t k = n / 2; while (k <= j) { j -= k; k /= 2; }
-		j += k;
-	}
+	size_t r = 0;
+	for (size_t k = n, j = i; k > 1; k /= 2, j /= 2) r = (2 * r) | (j % 2);
+	return r;
 }
 
 static void forward2(GF61 * const z, const size_t m, const size_t s)
@@ -128,7 +127,7 @@ static void forward2(GF61 * const z, const size_t m, const size_t s)
 
 static void backward2(GF61 * const z, const size_t m, const size_t s)
 {
-	const GF61 r2mi = GF61::root_nth(2 * m).conj();
+	const GF61 r2mi = GF61::root_nth(2 * m).invert();	// m is not a power of two
 
 	for (size_t j = 0; j < s; ++j)
 	{
@@ -141,36 +140,95 @@ static void backward2(GF61 * const z, const size_t m, const size_t s)
 	}
 }
 
-static void getHermitian(GF61 * const Z, const GF61 * const z2, const size_t n)
+static void forward3(GF61 * const z, const size_t m)
 {
-	const GF61 r = GF61::root_nth(2 * n);
-
-	for (size_t k = 0; k < n; ++k)
+	for (size_t i = 0; i < m; ++i)
 	{
-		const size_t mk = (k == 0) ? 0 : n - k;
-		const GF61 z2k = z2[k], z2mk = z2[mk].conj();
-		const GF61 f = (z2k + z2mk) * inv2, g = (z2k - z2mk) * inv2 * r.pow(k);
-		const GF61 x = f - g * GF61(0, 1);
-		Z[k] = x;
-		if (k == 0) Z[n] = f + g * GF61(0, 1);
-		else Z[2*n - k] = x.conj();
+		const GF61 u0 = z[3 * i + 0], u1 = z[3 * i + 1], u2 = z[3 * i + 2];
+		const GF61 t = (u1 - u2) * J;
+		z[3 * i + 0] = u0 + u1 + u2;
+		z[3 * i + 1] = u0 - u2 + t;
+		z[3 * i + 2] = u0 - u1 - t;
 	}
 }
 
-static void sqrHermitian(GF61 * const z2, const size_t n)
+static void backward3(GF61 * const z, const size_t m)
 {
-	const GF61 r = GF61::root_nth(2 * n), ri = r.conj();
-
-	for (size_t i = 0, n_2 = n / 2; i < n_2; ++i)
+	for (size_t i = 0; i < m; ++i)
 	{
-		const size_t k = i, mk = (k == 0) ? 0 : n - k;
-		const GF61 z2k = z2[k], z2mk = z2[mk].conj();
-		const GF61 u0 = (z2k + z2mk) * inv2, u1 = (z2k - z2mk) * inv2 * r.pow(i);
-		const GF61 s0 = (u0 - u1) * (u0 + u1), s1 = u0 * (u1 + u1);
-		const GF61 v0 = s0, v1 = s1 * ri.pow(i);
-		z2[k] = v0 + v1;
-		if (k == 0) z2[n_2] *= z2[n_2];
-		else z2[mk] = (v0 - v1).conj();
+		const GF61 u0 = z[3 * i + 0], u1 = z[3 * i + 1], u2 = z[3 * i + 2];
+		const GF61 t = (u1 - u2) * J;
+		z[3 * i + 0] = (u0 + u1 + u2) * inv3;
+		z[3 * i + 1] = (u0 - u1 - t) * inv3;
+		z[3 * i + 2] = (u0 - u2 + t) * inv3;
+	}
+}
+
+static void forward2v3(GF61 * const z, const size_t m, const size_t s)
+{
+	const GF61 r2m = GF61::root_nth(2 * m);
+
+	for (size_t j = 0; j < s; ++j)
+	{
+		for (size_t i = 0; i < m; ++i)
+		{
+			const size_t k = 2 * m * j + i;
+			for (size_t l = 0; l < 3; ++l)
+			{
+				const GF61 u0 = z[3 * (k + 0 * m) + l], u1 = z[3 * (k + 1 * m) + l];
+				z[3 * (k + 0 * m) + l] = u0 + u1; z[3 * (k + 1 * m) + l] = (u0 - u1) * r2m.pow(i);
+			}
+		}
+	}
+}
+
+static void backward2v3(GF61 * const z, const size_t m, const size_t s)
+{
+	const GF61 r2mi = GF61::root_nth(2 * m).conj();
+
+	for (size_t j = 0; j < s; ++j)
+	{
+		for (size_t i = 0; i < m; ++i)
+		{
+			const size_t k = 2 * m * j + i;
+			for (size_t l = 0; l < 3; ++l)
+			{
+				const GF61 u0 = z[3 * (k + 0 * m) + l], u1 = z[3 * (k + 1 * m) + l] * r2mi.pow(i);
+				z[3 * (k + 0 * m) + l] = (u0 + u1) * inv2; z[3 * (k + 1 * m) + l] = (u0 - u1) * inv2;
+			}
+		}
+	}
+}
+
+static void forward3w(GF61 * const z, const size_t n)
+{
+	const GF61 w_n = GF61::root_nth(n);
+
+	for (size_t i = 0; i < n / 3; ++i)
+	{
+		const GF61 w_i = w_n.pow(bitrev(i, n / 3)), w_i2 = w_i * w_i;
+
+		const GF61 u0 = z[3 * i + 0], u1 = z[3 * i + 1] * w_i, u2 = z[3 * i + 2] * w_i2;
+		const GF61 t = (u1 - u2) * J;
+		z[3 * i + 0] = u0 + u1 + u2;
+		z[3 * i + 1] = u0 - u2 + t;
+		z[3 * i + 2] = u0 - u1 - t;
+	}
+}
+
+static void backward3w(GF61 * const z, const size_t n)
+{
+	const GF61 w_ni = GF61::root_nth(n).invert();
+
+	for (size_t i = 0; i < n / 3; ++i)
+	{
+		const GF61 w_i = w_ni.pow(bitrev(i, n / 3)), w_i2 = w_i * w_i;
+
+		const GF61 u0 = z[3 * i + 0], u1 = z[3 * i + 1], u2 = z[3 * i + 2];
+		const GF61 t = (u1 - u2) * J;
+		z[3 * i + 0] = (u0 + u1 + u2) * inv3;
+		z[3 * i + 1] = (u0 - u1 - t) * inv3 * w_i;
+		z[3 * i + 2] = (u0 - u2 + t) * inv3 * w_i2;
 	}
 }
 
@@ -202,39 +260,39 @@ int main()
 {
 	std::srand((unsigned int)(std::time(nullptr)));
 
-	const size_t n = 1 << 12;
+	const size_t n = 3 << 12;
 	uint64_t P[n], Q[n], R[n];
 	for (size_t i = 0; i < n; ++i) P[i] = uint64_t(std::rand()) % 1000u;
 
 	square_slow(Q, P, n);
 
 	GF61 z[n];
+
+	// Radix-2 are twisted, radix-3 is not.
 	for (size_t i = 0; i < n; ++i) z[i] = GF61(P[i], 0);
-	for (size_t m = n / 2, s = 1; m >= 1; m /= 2, s *= 2) forward2(z, m, s);
-	scramble(z, n);
+	for (size_t m = n / 2, s = 1; m >= 3; m /= 2, s *= 2) forward2(z, m, s);
+	forward3(z, n / 3);
 	GF61 Z[n]; for (size_t i = 0; i < n; ++i) Z[i] = z[i];
-	for (size_t i = 0; i < n; ++i) z[i] *= z[i];
-	scramble(z, n);
-	for (size_t m = 1, s = n / 2; s >= 1; m *= 2, s /= 2) backward2(z, m, s);
+	for (size_t k = 0; k < n; ++k) z[k] *= z[k];
+	backward3(z, n / 3);
+	for (size_t m = 3, s = n / 6; s >= 1; m *= 2, s /= 2) backward2(z, m, s);
 	for (size_t i = 0; i < n; ++i) R[i] = z[i].s0().get();
 
 	check(Q, R, n);
 
-	GF61 z2[n / 2];	// half length
-	for (size_t i = 0; i < n / 2; ++i) z2[i] = GF61(P[2 * i + 0], P[2 * i + 1]);
-	for (size_t m = n / 4, s = 1; m >= 1; m /= 2, s *= 2) forward2(z2, m, s);
-	scramble(z2, n / 2);
-	GF61 ZP[n]; getHermitian(ZP, z2, n / 2);
-	sqrHermitian(z2, n / 2);
-	scramble(z2, n / 2);
-	for (size_t m = 1, s = n / 4; s >= 1; m *= 2, s /= 2) backward2(z2, m, s);
-	for (size_t i = 0; i < n / 2; ++i) { R[2 * i + 0] = z2[i].s0().get(); R[2 * i + 1] = z2[i].s1().get(); }
+	// Four step NTT: n1 = n / 3, n2 = 3
+	for (size_t i = 0; i < n; ++i) z[i] = GF61(P[i], 0);
+	for (size_t m = n / 6, s = 1; m >= 1; m /= 2, s *= 2) forward2v3(z, m, s);
+	forward3w(z, n);
+	GF61 Z4S[n]; for (size_t i = 0; i < n; ++i) Z4S[i] = z[i];
+	for (size_t k = 0; k < n; ++k) z[k] *= z[k];
+	backward3w(z, n);
+	for (size_t m = 1, s = n / 6; s >= 1; m *= 2, s /= 2) backward2v3(z, m, s);
+	for (size_t i = 0; i < n; ++i) R[i] = z[i].s0().get();
 
 	check(Q, R, n);
 
-	bool eq = true;
-	for (size_t i = 0; i < n; ++i) eq &= (ZP[i] == Z[i]);
-	if (!eq) std::cout << "Hermitian error" << std::endl;
+	for (size_t i = 0; i < n; ++i) if (!(Z4S[i] == Z[i])) std::cout << "Four step error: " << i << std::endl;
 
 	return EXIT_SUCCESS;
 }
