@@ -159,15 +159,16 @@ static void getHermitian(GF61 * const Z, const GF61 * const z2, const size_t n)
 
 static void sqrHermitian(GF61 * const z2, const size_t n)
 {
-	const GF61 r = GF61::root_nth(2 * n), ri = r.conj();
+	const GF61 r = GF61::root_nth(2 * n);
 
 	for (size_t k = 0, n_2 = n / 2; k < n_2; ++k)
 	{
 		const size_t mk = (k == 0) ? 0 : n - k;
+		const GF61 rk = r.pow(k);
 		const GF61 z2k = z2[k], z2mk = z2[mk].conj();
-		const GF61 u0 = (z2k + z2mk) * inv2, u1 = (z2k - z2mk) * inv2 * r.pow(k);
+		const GF61 u0 = (z2k + z2mk) * inv2, u1 = (z2k - z2mk) * inv2 * rk;
 		const GF61 s0 = (u0 - u1) * (u0 + u1), s1 = u0 * (u1 + u1);
-		const GF61 v0 = s0, v1 = s1 * ri.pow(k);
+		const GF61 v0 = s0, v1 = s1 * rk.conj();
 		z2[k] = v0 + v1;
 		if (k == 0) z2[n_2] *= z2[n_2];
 		else z2[mk] = (v0 - v1).conj();

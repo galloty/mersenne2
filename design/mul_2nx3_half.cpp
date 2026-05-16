@@ -56,7 +56,7 @@ public:
 	static const Z61 root_nth(const size_t n) { return Z61(_primroot).pow((_p - 1) / n); }
 };
 
-static const Z61 J = Z61::root_nth(3), inv2 = Z61(2).invert(), inv3 = Z61(3).invert();
+static const Z61 J = Z61::root_nth(3), inv2 = Z61(2).invert(), inv3 = Z61(3).invert(), inv8 = Z61(8).invert();
 
 // GF((2^61 - 1)^2): the prime field of order p^2, p = 2^61 - 1
 class GF61
@@ -107,26 +107,7 @@ class GF61v3
 private:
 	GF61 _z[3];
 
-public:
-	GF61v3() {}
-	explicit GF61v3(const GF61 & z0, const GF61 & z1, const GF61 & z2) { _z[0] = z0; _z[1] = z1; _z[2] = z2; }
-
-	const GF61 & operator[](const size_t i) const { return _z[i]; }
-
-	GF61v3 conj() const { return GF61v3(_z[0].conj(), _z[1].conj(), _z[2].conj()); }
-
-	GF61v3 & operator+=(const GF61v3 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] += rhs._z[i]; return *this; }
-	GF61v3 & operator-=(const GF61v3 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] -= rhs._z[i]; return *this; }
-	GF61v3 & operator*=(const Z61 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] *= rhs; return *this; }
-	GF61v3 & operator*=(const GF61 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] *= rhs; return *this; }
-	GF61v3 & operator*=(const GF61v3 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] *= rhs._z[i]; return *this; }
-
-	GF61v3 operator+(const GF61v3 & rhs) const { GF61v3 r = *this; r += rhs; return r; }
-	GF61v3 operator-(const GF61v3 & rhs) const { GF61v3 r = *this; r -= rhs; return r; }
-	GF61v3 operator*(const Z61 & rhs) const { GF61v3 r = *this; r *= rhs; return r; }
-	GF61v3 operator*(const GF61 & rhs) const { GF61v3 r = *this; r *= rhs; return r; }
-	GF61v3 operator*(const GF61v3 & rhs) { GF61v3 r = *this; r *= rhs; return r; }
-
+protected:
 	void weight(const GF61 & w)
 	{
 		_z[1] *= w; _z[2] *= w * w;
@@ -149,9 +130,38 @@ public:
 		_z[1] = (u0 - u1 - t) * inv3;
 		_z[2] = (u0 - u2 + t) * inv3;
 	}
+
+public:
+	GF61v3() {}
+	explicit GF61v3(const GF61 & z0, const GF61 & z1, const GF61 & z2) { _z[0] = z0; _z[1] = z1; _z[2] = z2; }
+
+	const GF61 & operator[](const size_t i) const { return _z[i]; }
+
+	GF61v3 conj() const { return GF61v3(_z[0].conj(), _z[1].conj(), _z[2].conj()); }
+
+	GF61v3 & operator+=(const GF61v3 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] += rhs._z[i]; return *this; }
+	GF61v3 & operator-=(const GF61v3 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] -= rhs._z[i]; return *this; }
+	GF61v3 & operator*=(const Z61 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] *= rhs; return *this; }
+	GF61v3 & operator*=(const GF61 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] *= rhs; return *this; }
+	GF61v3 & operator*=(const GF61v3 & rhs) { for (size_t i = 0; i < 3; ++i) _z[i] *= rhs._z[i]; return *this; }
+
+	GF61v3 operator+(const GF61v3 & rhs) const { GF61v3 r = *this; r += rhs; return r; }
+	GF61v3 operator-(const GF61v3 & rhs) const { GF61v3 r = *this; r -= rhs; return r; }
+	GF61v3 operator*(const Z61 & rhs) const { GF61v3 r = *this; r *= rhs; return r; }
+	GF61v3 operator*(const GF61 & rhs) const { GF61v3 r = *this; r *= rhs; return r; }
+	GF61v3 operator*(const GF61v3 & rhs) { GF61v3 r = *this; r *= rhs; return r; }
+
+	void sqr(const GF61 w)
+	{
+		weight(w);
+		forward3();
+		*this *= *this;
+		backward3();
+		weight(w.invert());
+	}
 };
 
-// bit-reversal permutation of index i for a sequence of n items
+// Bit-reversal permutation of index i for a sequence of n items
 static constexpr size_t bitrev(const size_t i, const size_t n)
 {
 	size_t r = 0;
@@ -228,7 +238,7 @@ int main()
 {
 	std::srand((unsigned int)(std::time(nullptr)));
 
-	const size_t n = 3 << 11;
+	const size_t n = 3 << 12;
 	uint64_t * const P = new uint64_t[n];
 	uint64_t * const Q = new uint64_t[n];
 	uint64_t * const R = new uint64_t[n];
@@ -244,12 +254,7 @@ int main()
 
 	for (size_t i = 0; i < n / 3; ++i)
 	{
-		const GF61 w_i = w_n.pow(bitrev(i, n / 3));
-		z[i].weight(w_i);
-		z[i].forward3();
-		z[i] *= z[i];
-		z[i].backward3();
-		z[i].weight(w_i.invert());
+		z[i].sqr(w_n.pow(bitrev(i, n / 3)));
 	}
 
 	for (size_t m = 1, s = n / 6; s >= 1; m *= 2, s /= 2) backward2(z, m, s);
@@ -259,11 +264,13 @@ int main()
 
 	GF61v3 * const z2 = new GF61v3[n / 6];	// half length
 
+	// algorithm
+
 	for (size_t i = 0; i < n / 6; ++i) z2[i] = GF61v3(GF61(P[6 * i + 0], P[6 * i + 3]), GF61(P[6 * i + 1], P[6 * i + 4]), GF61(P[6 * i + 2], P[6 * i + 5]));
 	for (size_t m = n / 12, s = 1; m >= 1; m /= 2, s *= 2) forward2(z2, m, s);
 	scramble(z2, n / 6);
 
-	const GF61 r = GF61::root_nth(2 * n / 6), ri = r.conj();
+	const GF61 r = GF61::root_nth(n / 3);
 
 	for (size_t i = 0; i < n / 6; ++i)
 	{
@@ -276,18 +283,39 @@ int main()
 
 	for (size_t i = 0; i <= n / 6; ++i)
 	{
-		const GF61 w_i = w_n.pow(i);
-		z[i].weight(w_i);
-		z[i].forward3();
-		z[i] *= z[i];
-		z[i].backward3();
-		z[i].weight(w_i.invert());
+		z[i].sqr(w_n.pow(i));
 	}
 
 	for (size_t i = 0; i < n / 6; ++i)
 	{
 		const GF61v3 zi = z[i], zmi = z[n / 6 - i].conj();
-		z2[i] = ((zi + zmi) + (zi - zmi) * ri.pow(i) * GF61(0, 1)) * inv2;
+		z2[i] = ((zi + zmi) + (zi - zmi) * r.conj().pow(i) * GF61(0, 1)) * inv2;
+	}
+
+	scramble(z2, n / 6);
+	for (size_t m = 1, s = n / 12; s >= 1; m *= 2, s /= 2) backward2(z2, m, s);
+	for (size_t i = 0; i < n / 6; ++i) for (size_t l = 0; l < 3; ++l) { R[6 * i + 0 + l] = z2[i][l].s0().get(); R[6 * i + 3 + l] = z2[i][l].s1().get(); }
+
+	check(Q, R, n);
+
+	// optimized version
+
+	for (size_t i = 0; i < n / 6; ++i) z2[i] = GF61v3(GF61(P[6 * i + 0], P[6 * i + 3]), GF61(P[6 * i + 1], P[6 * i + 4]), GF61(P[6 * i + 2], P[6 * i + 5]));
+	for (size_t m = n / 12, s = 1; m >= 1; m /= 2, s *= 2) forward2(z2, m, s);
+	scramble(z2, n / 6);
+
+	for (size_t k = 0; k < n / 12; ++k)
+	{
+		const size_t mk = (k == 0) ? 0 : n / 6 - k;
+		const GF61 rk = r.pow(k);
+		const GF61v3 z2k = z2[k], z2mk = z2[mk].conj();
+		const GF61v3 u0 = z2k + z2mk, u1 = (z2k - z2mk) * rk * GF61(0, 1);
+		GF61v3 s0 = u0 - u1, s1 = (k == 0) ? u0 + u1 : (u0 + u1).conj();
+		s0.sqr(w_n.pow(k)); s1.sqr(w_n.pow(n / 6 - k));
+		const GF61v3 v0 = s0 + s1.conj(), v1 = (s0 - s1.conj()) * rk.conj() * GF61(0, 1);
+		z2[k] = (v0 + v1) * inv8;
+		if (k == 0) z2[n / 12].sqr(w_n.pow(n / 12));
+		else z2[n / 6 - k] = (v0 - v1).conj() * inv8;
 	}
 
 	scramble(z2, n / 6);
