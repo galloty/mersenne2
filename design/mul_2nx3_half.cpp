@@ -97,7 +97,7 @@ public:
 		return r * y;
 	}
 
-	GF61 invert() const { __uint128_t t = (uint64_t(1) << 61) - 1; t = t * t - 2; return GF61(pow(t)); }
+	GF61 invert() const { __uint128_t t = (uint64_t(1) << 61) - 1; t = t * t - 2; return pow(t); }
 
 	static const GF61 root_nth(const size_t n) { return GF61(Z61(_h_0), Z61(_h_1)).pow(_h_order / n); }
 };
