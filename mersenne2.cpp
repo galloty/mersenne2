@@ -5,18 +5,9 @@ mersenne2.cpp is free source code. You can redistribute, use and/or modify it.
 Please give feedback to the authors if improvement is realized. It is distributed in the hope that it will be useful.
 */
 
-#include <iostream>
 #include <cstdint>
+#include <iostream>
 #include <array>
-
-// TODO move to mersenne
-// bit-reversal permutation of index i for a sequence of n items
-static constexpr size_t bitrev(const size_t i, const size_t n)
-{
-	size_t r = 0;
-	for (size_t k = n, j = i; k > 1; k /= 2, j /= 2) r = (2 * r) | (j % 2);
-	return r;
-}
 
 // Z/M_qZ: the prime field of order M_q = 2^q - 1
 // q_inv = 1 (mod q), transform_size | q
@@ -27,29 +18,10 @@ private:
 	static const uint_t _p = (uint_t(1) << q) - 1;
 	uint_t _n;	// 0 <= n < p
 
-	static uint_t _add(const uint_t a, const uint_t b)
-	{
-		const uint_t t = a + b;
-		return t - ((t >= _p) ? _p : 0);
-	}
-
-	static uint_t _sub(const uint_t a, const uint_t b)
-	{
-		const uint_t t = a - b;
-		return t + ((a < b) ? _p : 0);
-	}
-
-	static uint_t _mul(const uint_t a, const uint_t b)
-	{
-		const ulong_t t = a * ulong_t(b);
-		return _add(uint_t(t) & _p, uint_t(t >> q));
-	}
-
-	static uint_t _lshift(const uint_t a, const uint8_t s)
-	{
-		const ulong_t t = ulong_t(a) << s;
-		return _add(uint_t(t) & _p, uint_t(t >> q));
-	}
+	static uint_t _add(const uint_t a, const uint_t b) { const uint_t t = a + b; return t - ((t >= _p) ? _p : 0); }
+	static uint_t _sub(const uint_t a, const uint_t b) { const uint_t t = a - b; return t + ((a < b) ? _p : 0); }
+	static uint_t _mul(const uint_t a, const uint_t b) { const ulong_t t = a * ulong_t(b); return _add(uint_t(t) & _p, uint_t(t >> q)); }
+	static uint_t _lshift(const uint_t a, const uint8_t s) { const ulong_t t = ulong_t(a) << s; return _add(uint_t(t) & _p, uint_t(t >> q)); }
 
 public:
 	ZMq() {}
@@ -60,8 +32,10 @@ public:
 
 	bool operator!=(const ZMq & rhs) const { return (_n != rhs._n); }
 
-	ZMq neg() const { return ZMq((_n == 0) ? 0 : _p - _n); }
-	ZMq half() const { return ZMq(((_n % 2 == 0) ? _n : (_n + _p)) / 2); }
+	// ZMq neg() const { return ZMq((_n == 0) ? 0 : _p - _n); }
+	// ZMq half() const { return ZMq(((_n % 2 == 0) ? _n : (_n + _p)) / 2); }
+
+	ZMq & operator*=(const ZMq & rhs) { _n = _mul(_n, rhs._n); return *this; }
 
 	ZMq operator+(const ZMq & rhs) const { return ZMq(_add(_n, rhs._n)); }
 	ZMq operator-(const ZMq & rhs) const { return ZMq(_sub(_n, rhs._n)); }
@@ -74,9 +48,9 @@ public:
 
 	ZMq pow(const uint64_t e) const
 	{
-		if (e == 0) return ZMq(1u);
+		if (e == 0) return ZMq(1);
 
-		ZMq r = ZMq(1u), y = *this;
+		ZMq r = ZMq(1), y = *this;
 		for (uint64_t i = e; i != 1; i /= 2)
 		{
 			if (i % 2 != 0) r = r * y;
@@ -91,6 +65,36 @@ public:
 
 	static const ZMq root_nth(const size_t n) { return ZMq(primroot).pow((_p - 1) / n); }
 	static uint8_t log2_root_two(const size_t n) { return uint8_t((q_inv / n) % q); }
+
+	// Cyclic convolution of three numbers
+	static void sqr3(ZMq z[3])
+	{
+		static const ZMq J = root_nth(3);
+
+		// Radix-3
+		const ZMq u0 = z[0], u1 = z[1], u2 = z[2];
+		const ZMq td = (u1 - u2) * J;
+		const ZMq v0 = u0 + u1 + u2, v1 = u0 - u2 + td, v2 = u0 - u1 - td;
+
+		// Squaring
+		const ZMq s0 = v0.sqr(), s1 = v1.sqr(), s2 = v2.sqr();
+
+		// Inverse Radix-3
+		const ZMq ti = (s1 - s2) * J;
+		z[0] = s0 + s1 + s2; z[1] = s0 - s1 - ti; z[2] = s0 - s2 + ti;
+	}
+
+	// Weighted convolution of three numbers
+	static void weighted_sqr3(ZMq z[3], const ZMq & w, const ZMq & wi)
+	{
+		// Weighted inputs
+		z[1] *= w; z[2] *= w.sqr();
+
+		sqr3(z);
+
+		// Unweighted outputs
+		z[1] *= wi; z[2] *= wi.sqr();
+	}
 
 	// IBDWT: weighted digits
 	static void weight(ZMq * const x, const uint8_t * const w_ib, const size_t n)
@@ -115,7 +119,7 @@ public:
 	}
 };
 
-// GF(p^2): the prime field of order p^2, p % 4 = 3
+// GF(p^2): the field of order p^2, p % 4 = 3
 // primroot must be a primitive root of order primroot_order which is a root of (0, 1).
 template<typename Zp, uint64_t primroot_order, uint64_t primroot_0, uint64_t primroot_1>
 class GFp2
@@ -126,23 +130,12 @@ private:
 public:
 	GFp2() {}
 	explicit GFp2(const Zp & s0, const Zp & s1) : _s0(s0), _s1(s1) {}
-	explicit GFp2(const uint64_t n0, const uint64_t n1) : _s0(n0), _s1(n1) {}
 
 	void store(Zp & s0, Zp & s1) const { s0 = _s0; s1 = _s1; }
 
-	const Zp & s0() const { return _s0; }
-	const Zp & s1() const { return _s1; }
-	Zp & s0() { return _s0; }
-	Zp & s1() { return _s1; }
-
-	void set0(const uint64_t n0) { _s0 = Zp(n0); }
-	void set1(const uint64_t n1) { _s1 = Zp(n1); }
-
-	bool operator!=(const GFp2 & rhs) const { return ((_s0 != rhs._s0) || (_s1 != rhs._s1)); }
-
-	GFp2 conj() const { return GFp2(_s0, _s1.neg()); }
-	GFp2 muli() const { return GFp2(_s1.neg(), _s0); }
-	GFp2 half() const { return GFp2(_s0.half(), _s1.half()); }
+	// GFp2 conj() const { return GFp2(_s0, _s1.neg()); }
+	// GFp2 muli() const { return GFp2(_s1.neg(), _s0); }
+	// GFp2 half() const { return GFp2(_s0.half(), _s1.half()); }
 
 	GFp2 operator+(const GFp2 & rhs) const { return GFp2(_s0 + rhs._s0, _s1 + rhs._s1); }
 	GFp2 operator-(const GFp2 & rhs) const { return GFp2(_s0 - rhs._s0, _s1 - rhs._s1); }
@@ -151,17 +144,21 @@ public:
 	GFp2 sub_conj(const GFp2 & rhs) const { return GFp2(_s0 - rhs._s0, rhs._s1 - _s1); }
 	GFp2 addi(const GFp2 & rhs) const { return GFp2(_s0 - rhs._s1, _s1 + rhs._s0); }
 	GFp2 subi(const GFp2 & rhs) const { return GFp2(_s0 + rhs._s1, _s1 - rhs._s0); }
+	GFp2 addiconj(const GFp2 & rhs) const { return GFp2(_s0 + rhs._s1, _s1 + rhs._s0); }
+	GFp2 subiconj(const GFp2 & rhs) const { return GFp2(_s0 - rhs._s1, rhs._s0 - _s1); }
+	GFp2 subi_conj(const GFp2 & rhs) const { return GFp2(_s0 + rhs._s1, rhs._s0 - _s1); }
 
 	GFp2 operator*(const Zp & rhs) const { return GFp2(_s0 * rhs, _s1 * rhs); }
 
 	GFp2 sqr() const { const Zp t = _s0 * _s1; return GFp2(_s0.sqr() - _s1.sqr(), t + t); }
 	GFp2 mul(const GFp2 & rhs) const { return GFp2(_s0 * rhs._s0 - _s1 * rhs._s1, _s1 * rhs._s0 + _s0 * rhs._s1); }
 	GFp2 mulconj(const GFp2 & rhs) const { return GFp2(_s0 * rhs._s0 + _s1 * rhs._s1, _s1 * rhs._s0 - _s0 * rhs._s1); }
+	GFp2 mul_neg0(const GFp2 & rhs) const { return GFp2(_s1 * rhs._s1 - _s0 * rhs._s0, _s1 * rhs._s0 + _s0 * rhs._s1); }
 
 	GFp2 pow(const __uint128_t e) const
 	{
-		if (e == 0) return GFp2(1u, 0u);
-		GFp2 r = GFp2(1u, 0u), y = *this;
+		if (e == 0) return GFp2(Zp(1), Zp(0));
+		GFp2 r = GFp2(Zp(1), Zp(0)), y = *this;
 		for (__uint128_t i = e; i != 1; i /= 2) { if (i % 2 != 0) r = r.mul(y); y = y.sqr(); }
 		return r.mul(y);
 	}
@@ -172,22 +169,20 @@ public:
 
 	// Radix-2 DIF
 	template<size_t L>
-	static void forward2(Zp * const x, const size_t m, const size_t s)
+	static void forward2(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
 	{
-		const GFp2 r_m = root_nth(2 * m);
-
 		for (size_t j = 0; j < s; ++j)
 		{
 			for (size_t i = 0; i < m; ++i)
 			{
 				const size_t k = L * (2 * m * j + i);
-				const GFp2 r_mi = r_m.pow(i);
+				const GFp2 w_is = w[i * s];
 
 				for (size_t l = 0; l < L; ++l)
 				{
 					const GFp2 u0 = GFp2(x[2 * (k + 0 * m) + 0 + l], x[2 * (k + 0 * m) + L + l]);
 					const GFp2 u1 = GFp2(x[2 * (k + L * m) + 0 + l], x[2 * (k + L * m) + L + l]);
-					const GFp2 v0 = u0 + u1, v1 = (u0 - u1).mul(r_mi);
+					const GFp2 v0 = u0 + u1, v1 = (u0 - u1).mul(w_is);
 					v0.store(x[2 * (k + 0 * m) + 0 + l], x[2 * (k + 0 * m) + L + l]);
 					v1.store(x[2 * (k + L * m) + 0 + l], x[2 * (k + L * m) + L + l]);
 				}
@@ -197,21 +192,19 @@ public:
 
 	// Radix-2 DIT
 	template<size_t L>
-	static void backward2(Zp * const x, const size_t m, const size_t s)
+	static void backward2(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
 	{
-		const GFp2 r_m = root_nth(2 * m);
-
 		for (size_t j = 0; j < s; ++j)
 		{
 			for (size_t i = 0; i < m; ++i)
 			{
 				const size_t k = L * (2 * m * j + i);
-				const GFp2 r_mi = r_m.pow(i);
+				const GFp2 w_is = w[i * s];
 
 				for (size_t l = 0; l < L; ++l)
 				{
 					const GFp2 u0 = GFp2(x[2 * (k + 0 * m) + 0 + l], x[2 * (k + 0 * m) + L + l]);
-					const GFp2 u1 = GFp2(x[2 * (k + L * m) + 0 + l], x[2 * (k + L * m) + L + l]).mulconj(r_mi);
+					const GFp2 u1 = GFp2(x[2 * (k + L * m) + 0 + l], x[2 * (k + L * m) + L + l]).mulconj(w_is);
 					const GFp2 v0 = u0 + u1, v1 = u0 - u1;
 					v0.store(x[2 * (k + 0 * m) + 0 + l], x[2 * (k + 0 * m) + L + l]);
 					v1.store(x[2 * (k + L * m) + 0 + l], x[2 * (k + L * m) + L + l]);
@@ -220,29 +213,28 @@ public:
 		}
 	}
 
-	static void weighted_sqr3(GFp2 z[3], const GFp2 w, GFp2 wi)
+	// Weighted convolution of three numbers
+	static void weighted_sqr3(GFp2 z[3], const GFp2 & w, const GFp2 & wi)
 	{
-		const GFp2 w2 = w.sqr(), wi2 = wi.sqr();
 		static const Zp J = Zp::root_nth(3);
 
-		// weighted inputs
-		const GFp2 u0 = z[0], u1 = z[1].mul(w), u2 = z[2].mul(w2);
+		// Weighted inputs
+		const GFp2 u0 = z[0], u1 = z[1].mul(w), u2 = z[2].mul(w.sqr());
 
 		// Radix-3
 		const GFp2 td = (u1 - u2) * J;
 		const GFp2 v0 = u0 + u1 + u2, v1 = u0 - u2 + td, v2 = u0 - u1 - td;
 
-		// square
+		// Squaring
 		const GFp2 s0 = v0.sqr(), s1 = v1.sqr(), s2 = v2.sqr();
 
 		// Inverse Radix-3
 		const GFp2 ti = (s1 - s2) * J;
 		const GFp2 t0 = s0 + s1 + s2, t1 = s0 - s1 - ti, t2 = s0 - s2 + ti;
 
-		// unweighted outputs
-		z[0] = t0; z[1] = t1.mul(wi); z[2] = t2.mul(wi2);
+		// Unweighted outputs
+		z[0] = t0; z[1] = t1.mul(wi); z[2] = t2.mul(wi.sqr());
 	}
-
 
 	// Input of the transform is 'real' (if alpha is the symbolic square root of p - 1 and the elements of GF(p^2) are a + b*alpha then b = 0).
 	// A length-n/2 transform is computed onto z(k) = x(2*k + 0) + x(2*k + 1)*alpha.
@@ -251,70 +243,75 @@ public:
 	// Output is recombined to produce the half-length transform (full length is not needed because of Hermitian symmetry).
 	static void sqr(Zp * const x, const GFp2 * const w, const size_t n)
 	{
-		for (size_t j = 0; j < n / 4; ++j)
+		// First point: z[0] = z[-0] and w[0] = 1
+		const Zp u0 = x[0] + x[0], u1 = x[1] + x[1];
+		x[0] = u0.sqr() + u1.sqr(); x[1] = u0 * (u1 + u1);
+		// Middle point: z[n/4] = z[-n/4] and w[n/4] = -1
+		const Zp v0 = x[2] + x[2], v1 = x[3] + x[3];
+		x[2] = v0.sqr() - v1.sqr(); x[3] = v0 * (v1 + v1);
+
+		for (size_t j = 1; j < n / 4; ++j)
 		{
 			// const size_t k = 2 * j, kr = bitrev(k, _n / 2), mk = bitrev(_n / 2 - kr, _n / 2);
-			const size_t k = 2 * j, mk = (k != 0) ? (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1 : 0;
+			const size_t k = 2 * j, mk = (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1;
 			const GFp2 zk = GFp2(x[2 * k + 0], x[2 * k + 1]), zmk = GFp2(x[2 * mk + 0], x[2 * mk + 1]);
 			const GFp2 u0 = zk.addconj(zmk), u1 = zk.subconj(zmk);
 			const GFp2 s0 = u0.sqr() - u1.sqr().mul(w[j]), s1 = u0.mul(u1 + u1);
 			const GFp2 v0 = s0 + s1, v1 = s0.sub_conj(s1);
-			v0.store(x[2 * k + 0], x[2 * k + 1]);
-			if (k == 0) { GFp2 z1 = GFp2(x[2], x[3]); z1 = (z1 + z1).sqr(); z1.store(x[2], x[3]); }
-			else v1.store(x[2 * mk + 0], x[2 * mk + 1]);
+			v0.store(x[2 * k + 0], x[2 * k + 1]); v1.store(x[2 * mk + 0], x[2 * mk + 1]);
 		}
 	}
 
 	// A "Four Step" NTT algorithm, where n_1 = 2^m and n_2 = 3.
 	// See Bailey, D.H. FFTs in external or hierarchical memory. J Supercomput 4, 23–35 (1990).
 	// Compute the last stage of the length-n/2 transform (combine z[k] and z[-k] with a {n/3}th root).
-	// Multiply by the four-step twiddle factors. Calculate the radix-3, square and apply the reverse operations.
-	static void sqr3(Zp * const x, const size_t n)
+	// Multiply by the four-step twiddle factors, calculate the cyclic convolution of length  and apply the reverse operations.
+	static void sqr3(Zp * const x, const GFp2 * const w, const size_t n)
 	{
-		const GFp2 r = root_nth(n / 3);
-		const GFp2 w_n = root_nth(n);
+		static const Zp R6 = Zp::root_nth(6), R6i = R6.invert();
+		static const GFp2 R12 = GFp2::root_nth(12), R12i = R12.invert();
 
-		for (size_t j = 0; j < n / 12; ++j)
+		// First point: z[0] = z[-0] and w[0] = 1
+		Zp s0[3], s1[3];
+		for (size_t l = 0; l < 3; ++l)
+		{
+			const Zp u0 = x[0 + l] + x[0 + l], u1 = x[3 + l] + x[3 + l];
+			s0[l] = u0 + u1; s1[l] = u0 - u1;
+		}
+		Zp::sqr3(s0);
+		Zp::weighted_sqr3(s1, R6, R6i);
+		for (size_t l = 0; l < 3; ++l)
+		{
+			x[0 + l] = s0[l] + s1[l]; x[3 + l] = s0[l] - s1[l];
+		}
+
+		// Middle point: z[n/12] = z[-n/12] and w[n/12] = -1
+		GFp2 s2[3];
+		for (size_t l = 0; l < 3; ++l) s2[l] = GFp2(x[6 + l] + x[6 + l], x[9 + l] + x[9 + l]);
+		weighted_sqr3(s2, R12, R12i);
+		for (size_t l = 0; l < 3; ++l) (s2[l] + s2[l]).store(x[6 + l], x[9 + l]);
+
+		for (size_t j = 1; j < n / 12; ++j)
 		{
 			// const size_t k = 2 * j, kr = bitrev(k, _n / 6), mk = bitrev(_n / 6 - kr, _n / 6);
-			const size_t k = 2 * j, mk = (k != 0) ? (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1 : 0;
-			const GFp2 rk = r.pow(bitrev(j, n / 12));
+			const size_t k = 2 * j, mk = (size_t(3) << (63 - __builtin_clzll((unsigned long long)k))) - k - 1;
+
 			GFp2 s0[3], s1[3];
 			for (size_t l = 0; l < 3; ++l)
 			{
 				const GFp2 zk = GFp2(x[6 * k + 0 + l], x[6 * k + 3 + l]), zmk = GFp2(x[6 * mk + 0 + l], x[6 * mk + 3 + l]);
-				const GFp2 u0 = zk.addconj(zmk), u1 = zk.subconj(zmk).mul(rk).muli();
-				s0[l] = u0 - u1; s1[l] = (k == 0) ? u0 + u1 : (u0 + u1).conj();
+				const GFp2 u0 = zk.addconj(zmk), u1 = zk.subconj(zmk).mul_neg0(w[5 * j + 0]);
+				s0[l] = u0.addiconj(u1); s1[l] = u0.subiconj(u1);
 			}
 
-			const GFp2 w_nj = w_n.pow(bitrev(j, n / 12));
-			weighted_sqr3(s0, w_nj, w_nj.invert());
-			const GFp2 w_nj_6 = w_n.pow(n / 6 - bitrev(j, n / 12));
-			weighted_sqr3(s1, w_nj_6, w_nj_6.invert());
+			weighted_sqr3(s0, w[5 * j + 1], w[5 * j + 2]);
+			weighted_sqr3(s1, w[5 * j + 3], w[5 * j + 4]);
 
 			for (size_t l = 0; l < 3; ++l)
 			{
-				const GFp2 v0 = s0[l] + s1[l].conj(), v1 = (s0[l] - s1[l].conj()).mul(rk.conj()).muli();
-				const GFp2 zk = v0 + v1;
-				zk.store(x[6* k + 0 + l], x[6 * k + 3 + l]);
-				if (k != 0)
-				{
-					const GFp2 zmk = (v0 - v1).conj();
-					zmk.store(x[6 * mk + 0 + l], x[6 * mk + 3 + l]);
-				}
-			}
-
-			if (k == 0)
-			{
-				GFp2 z1[3];
-				for (size_t l = 0; l < 3; ++l) z1[l] = GFp2(x[6 + 0 + l], x[6 + 3 + l]);
-				for (size_t l = 0; l < 3; ++l) z1[l] = z1[l] + z1[l];
-
-				const GFp2 w_n12 = w_n.pow(n / 12);
-				weighted_sqr3(z1, w_n12, w_n12.invert());
-
-				for (size_t l = 0; l < 3; ++l) z1[l] = z1[l] + z1[l];
-				for (size_t l = 0; l < 3; ++l) z1[l].store(x[6 + 0 + l], x[6 + 3 + l]);
+				const GFp2 v0 = s0[l].addconj(s1[l]), v1 = s0[l].subconj(s1[l]).mulconj(w[5 * j + 0]);
+				const GFp2 zk = v0.addi(v1), zmk = v0.subi_conj(v1);
+				zk.store(x[6 * k + 0 + l], x[6 * k + 3 + l]); zmk.store(x[6 * mk + 0 + l], x[6 * mk + 3 + l]);
 			}
 		}
 	}
@@ -339,7 +336,7 @@ private:
 	uint8_t * const _digit_width;
 
 private:
-	// Make sure the transform is long enough so that each digit cannot overflow after the convolution.
+	// Make sure the transform is long enough so that each digit cannot overflow after the convolution
 	static constexpr size_t transform_size(const uint32_t q)
 	{
 		uint8_t log2_n = 1, log2_n3 = 1; uint32_t w = 0;
@@ -350,7 +347,7 @@ private:
 			w = q >> log2_n;
 		// the condition is n * (2^{w + 1} - 1)^2 < (2^61 - 1)*(2^31 - 1))
 		// 2 * (w + 1) + log2(n) <= 91 < 91.99999999932
-		} while (2 * (w + 1) * 2 + log2_n > 91);
+		} while (2 * (w + 1) + log2_n > 91);
 
 		do
 		{
@@ -358,7 +355,7 @@ private:
 			w = q / (3u << log2_n3);
 		// The condition is 3 * n * (2^{w + 1} - 1)^2 < (2^61 - 1)*(2^31 - 1))
 		// 2 * (w + 1) + log2(n) <= 90 < 91.99999999932 - 1.5849625
-		} while ((w + 1) * 2 + log2_n3 > 90);
+		} while (2 * (w + 1) + log2_n3 > 90);
 
 		// return size_t(1) << log2_n;
 		// return size_t(3) << log2_n3;
@@ -368,10 +365,10 @@ private:
 	// Chinese remainder theorem
 	static __uint128_t garner(const Z61 & n61, const Z31 & n31)
 	{
-		Z61 u = n61 - Z61(n31.get()); 
+		const Z61 u = n61 - Z61(n31.get()); 
 		// The inverse of 2^31 - 1 mod 2^61 - 1 is 2^31 + 1
-		u = u + u.lshift(31);
-		const uint64_t s = u.get();
+		const Z61 v = u + u.lshift(31);
+		const uint64_t s = v.get();
 		return n31.get() + (__uint128_t(s) << 31) - s;
 	}
 
@@ -420,6 +417,42 @@ private:
 		}
 	}
 
+	// Bit-reversal permutation of index i for a sequence of n items
+	static constexpr size_t bitrev(const size_t i, const size_t n)
+	{
+		size_t r = 0;
+		for (size_t k = n, j = i; k > 1; k /= 2, j /= 2) r = (2 * r) | (j % 2);
+		return r;
+	}
+
+	template<typename GF>
+	static void init_twiddle_factors(GF * const w, const size_t n)
+	{
+		// Radix-2
+		const GF r = (n % 3 != 0) ? GF::root_nth(n / 2) : GF::root_nth(n / 6);
+		for (size_t j = 0; j < n; ++j) w[j] = r.pow(j);
+
+		// Hermitian product
+		if (n % 3 != 0)
+		{
+			const GF r_n_2 = GF::root_nth(n / 2);
+			for (size_t j = 0; j < n / 4; ++j) w[n + j] = r_n_2.pow(bitrev(j, n / 4));
+		}
+		else
+		{
+			const GF r_n = GF::root_nth(n), r_n_3 = GF::root_nth(n / 3);
+			for (size_t j = 0; j < n / 12; ++j)
+			{
+				const size_t jr = bitrev(j, n / 12);
+				w[n + 5 * j + 0] = r_n_3.pow(bitrev(j, n / 12));	// Four step factor
+				const GF rj = r_n.pow(jr);
+				w[n + 5 * j + 1] = rj; w[n + 5 * j + 2] = rj.invert();
+				const GF rjp = r_n.pow(n / 6 - jr);
+				w[n + 5 * j + 3] = rjp; w[n + 5 * j + 4] = rjp.invert();
+			}
+		}
+	}
+
 public:
 	mersenne(const uint32_t q) : _n(transform_size(q)),
 		_x61(new Z61[_n]), _x31(new Z31[_n]),
@@ -427,37 +460,15 @@ public:
 		_w_ib61(new uint8_t[_n]), _w_ib31(new uint8_t[_n]),
 		_digit_width(new uint8_t[_n])
 	{
-		// const uint8_t ln = _ln;
 		const size_t n = _n;
 
-		// radix-2 twiddle factors
-		GF61 * const w61 = _w61;
-		GF31 * const w31 = _w31;
-		// for (size_t s = 1; s < n / 4; s *= 2)
-		// {
-		// 	const GF61_31 r_s = GF61_31::root_nth(2 * s);
-		// 	for (size_t j = 0; j < s; ++j) w[s + j] = r_s.pow(bitrev(j, s));
-		// }
-		if (n % 3 != 0)
-		{
-			// Hermitian product twiddle factors
-			size_t s = n / 4;
-			const GF61 r_s61 = GF61::root_nth(2 * s);
-			for (size_t j = 0; j < s; ++j) w61[s + j] = r_s61.pow(bitrev(j, s));
-			const GF31 r_s31 = GF31::root_nth(2 * s);
-			for (size_t j = 0; j < s; ++j) w31[s + j] = r_s31.pow(bitrev(j, s));
-		}
-
-		// radix-4 twiddle factors
-		// for (size_t s = 1; s <= n / 4; s *= 2)
-		// {
-		// 	for (size_t j = 0; j < s; ++j) w[n / 2 + s + j] = w[s + j].mul(w[2 * (s + j)]);
-		// }
+		init_twiddle_factors<GF61>(_w61, n);
+		init_twiddle_factors<GF31>(_w31, n);
 
 		// IBDWT weights: x^q - 1 => x^n - 1
 		// See Richard Crandall, Barry Fagin, "Discrete weighted transforms and large-integer arithmetic", Math. Comp. 62 (1994), 305-324.
 
-		// Weights are power of two. Store log_2(weight).
+		// Weights are power of two: store log_2(weight)
 		uint8_t * const w_ib61 = _w_ib61;
 		uint8_t * const w_ib31 = _w_ib31;
 		uint8_t * const digit_width = _digit_width;
@@ -475,14 +486,14 @@ public:
 			// ceil(a / b) = floor((a - 1) / b) + 1
 			const uint64_t ceil_qj_n = (j == n) ? q : (qj - 1) / n + 1;
 
-			// bit position for digit[i] is ceil(qj / n)
+			// Bit position for digit[i] is ceil(qj / n)
 			const uint64_t c = ceil_qj_n - ceil_qjm1_n;
 			if ((c != q_n) && (c != q_n + 1u)) throw;
 			digit_width[j - 1] = uint8_t(c);
 
 			if (j == n) break;
 
-			// weight is 2^[ceil(qj/n) - qj/n]
+			// Weight is 2^[ceil(qj/n) - qj/n]
 			// e = (ceil(qj / n).n - qj) / n
 			// qj = k.n => e = 0
 			// qj = k.n + r, r > 0 => ((k + 1).n - (k.n + r)) / n = (n - r) / n
@@ -513,8 +524,8 @@ public:
 		Z31 * const x31 = _x31;
 		const size_t n = _n;
 
-		x61[0] = Z61(a); for (size_t k = 1; k < n; ++k) x61[k] = Z61(0u);
-		x31[0] = Z31(a); for (size_t k = 1; k < n; ++k) x31[k] = Z31(0u);
+		x61[0] = Z61(a); for (size_t k = 1; k < n; ++k) x61[k] = Z61(0);
+		x31[0] = Z31(a); for (size_t k = 1; k < n; ++k) x31[k] = Z31(0);
 	}
 
 	void square() const
@@ -529,38 +540,38 @@ public:
 
 		if (_n % 3 != 0)
 		{
-			// weighted convolution, radix-2 transforms
+			// Weighted convolution, radix-2 transforms
 
 			Z61::weight(x61, w_ib61, n);
-			for (size_t m = n / 4, s = 1; m >= 1; m /= 2, s *= 2) GF61::forward2<1>(x61, m, s);
-			GF61::sqr(x61, &w61[n / 4], n);
-			for (size_t m = 1, s = n / 4; s >= 1; m *= 2, s /= 2) GF61::backward2<1>(x61, m, s);
+			for (size_t m = n / 4, s = 1; m >= 1; m /= 2, s *= 2) GF61::forward2<1>(x61, w61, m, s);
+			GF61::sqr(x61, &w61[n], n);
+			for (size_t m = 1, s = n / 4; s >= 1; m *= 2, s /= 2) GF61::backward2<1>(x61, w61, m, s);
 			Z61::unweight_norm(x61, w_ib61, n);
 
 			Z31::weight(x31, w_ib31, n);
-			for (size_t m = n / 4, s = 1; m >= 1; m /= 2, s *= 2) GF31::forward2<1>(x31, m, s);
-			GF31::sqr(x31, &w31[n / 4], n);
-			for (size_t m = 1, s = n / 4; s >= 1; m *= 2, s /= 2) GF31::backward2<1>(x31, m, s);
+			for (size_t m = n / 4, s = 1; m >= 1; m /= 2, s *= 2) GF31::forward2<1>(x31, w31, m, s);
+			GF31::sqr(x31, &w31[n], n);
+			for (size_t m = 1, s = n / 4; s >= 1; m *= 2, s /= 2) GF31::backward2<1>(x31, w31, m, s);
 			Z31::unweight_norm(x31, w_ib31, n);
 		}
 		else
 		{
-			// weighted convolution, radix-2 + radix-3 transforms
+			// Weighted convolution, radix-2 + radix-3 transforms
 
 			Z61::weight(x61, w_ib61, n);
-			for (size_t m = n / 4 / 3, s = 1; m >= 1; m /= 2, s *= 2) GF61::forward2<3>(x61, m, s);
-			GF61::sqr3(x61, n);
-			for (size_t m = 1, s = n / 4 / 3; s >= 1; m *= 2, s /= 2) GF61::backward2<3>(x61, m, s);
+			for (size_t m = n / 4 / 3, s = 1; m >= 1; m /= 2, s *= 2) GF61::forward2<3>(x61, w61, m, s);
+			GF61::sqr3(x61, &w61[n], n);
+			for (size_t m = 1, s = n / 4 / 3; s >= 1; m *= 2, s /= 2) GF61::backward2<3>(x61, w61, m, s);
 			Z61::unweight_norm(x61, w_ib61, n);
 
 			Z31::weight(x31, w_ib31, n);
-			for (size_t m = n / 4 / 3, s = 1; m >= 1; m /= 2, s *= 2) GF31::forward2<3>(x31, m, s);
-			GF31::sqr3(x31, n);
-			for (size_t m = 1, s = n / 4 / 3; s >= 1; m *= 2, s /= 2) GF31::backward2<3>(x31, m, s);
+			for (size_t m = n / 4 / 3, s = 1; m >= 1; m /= 2, s *= 2) GF31::forward2<3>(x31, w31, m, s);
+			GF31::sqr3(x31, &w31[n], n);
+			for (size_t m = 1, s = n / 4 / 3; s >= 1; m *= 2, s /= 2) GF31::backward2<3>(x31, w31, m, s);
 			Z31::unweight_norm(x31, w_ib31, n);
 		}
 
-		// carry propagation
+		// Carry propagation
 		carry();
 	}
 
@@ -590,7 +601,7 @@ public:
 
 		for (size_t k = 0; k < n; ++k)
 		{
-			if (x61[k].get() != 0u) return false;
+			if (x61[k].get() != 0) return false;
 		}
 		return true;
 	}
@@ -610,7 +621,7 @@ public:
 	}
 };
 
-// #define	CHECK_MERSENNE_PRIMES	true
+#define	CHECK_MERSENNE_PRIMES	true
 
 int main()
 {
