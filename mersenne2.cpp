@@ -125,7 +125,7 @@ public:
 // primroot must be a primitive root of order primroot_order and
 //  - the 4th root of unity must be (0, 1),
 //  - the 8th root of unity must be 2^{(q - 1)/2} * (1, 1), where p = 2^q - 1.
- template<typename Zp, uint64_t primroot_order, uint64_t primroot_0, uint64_t primroot_1>
+template<typename Zp, uint64_t primroot_order, uint64_t primroot_0, uint64_t primroot_1>
 class GFp2
 {
 private:
