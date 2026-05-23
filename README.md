@@ -8,7 +8,7 @@ A number theoretic weighted transform can be used. Nick Craig-Wood ([IOCCC 2012 
 
 **mersenne2** is an implementation of a (large) Mersenne IBDWT over a set of finite fields GF(*M*<sub>*q*</sub><sup>2</sup>), where *M*<sub>*q*</sub> is itself a (small) Mersenne prime. A root of unity of order 3&nbsp;&middot;&nbsp;2<sup>*q*+1</sup> exists in GF(*M*<sub>*q*</sub><sup>2</sup>). Hence, the transform length can be any divisor of 3&nbsp;&middot;&nbsp;2<sup>*q*+1</sup>.
 
-Let *n* be the length of the transform. Over the field &Zopf;/*p*&Zopf;, the NTT is a radix-2 transform, the number of operations is *K*&nbsp;&middot;&nbsp;*n*&nbsp;&middot;&nbsp;log<sub>2</sub>&middot;*n*. Over the field GF(*M*<sub>*q*</sub><sup>2</sup>), the NTT is a radix-4 transform of half length then the number of operations is 3/2&nbsp;&middot;&nbsp;*K*&nbsp;&middot;&nbsp;*n*&nbsp;&middot;&nbsp;log<sub>2</sub>&middot;*n*.  
+Let *n* be the length of the transform. Over the field &Zopf;/*p*&Zopf;, if the NTT is a radix-2 transform, the number of operations is *K*&nbsp;&middot;&nbsp;*n*&nbsp;&middot;&nbsp;log<sub>2</sub>&middot;*n*. Over the field GF(*M*<sub>*q*</sub><sup>2</sup>), if the NTT is a radix-4 transform of half length then the number of operations is 3/2&nbsp;&middot;&nbsp;*K*&nbsp;&middot;&nbsp;*n*&nbsp;&middot;&nbsp;log<sub>2</sub>&middot;*n*.  
 
 *M*<sub>61</sub> = 2<sup>61</sup>&nbsp;-&nbsp;1 can be compared to 2<sup>64</sup>&nbsp;-&nbsp;2<sup>32</sup>&nbsp;+&nbsp;1. The number of modular operations is +50% but the modular reduction is easier to calculate. With GF(*M*<sub>*q*</sub><sup>2</sup>), the weights are powers of two: weighting inputs and unweighting outputs are shift operations.  
 
