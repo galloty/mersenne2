@@ -13,7 +13,7 @@ inline uint32_t mul_hi(const uint32_t x, const uint32_t y) { return uint32_t((x 
 inline uint32_t div3(const uint32_t n) { return mul_hi(n, 1431655766u); }	// = n / 3 if n < 2^31
 
 // Z/M_qZ: the prime field of order M_q = 2^q - 1
-// q_inv = 1 (mod q), transform_size | q
+// q_inv = 1 (mod q), transform_size | q.
 template<int q, uint32_t primroot, uint64_t q_inv, typename uint_t, typename ulong_t>
 class ZMq
 {
@@ -31,7 +31,7 @@ public:
 	explicit ZMq(const uint64_t n) : _n(uint_t((n >= _p) ? n % _p : n)) {}
 
 	uint_t get() const { return _n; }
-	static uint_t get_p() { return _p; }
+	static int get_q() { return q; }
 
 	bool operator!=(const ZMq & rhs) const { return (_n != rhs._n); }
 
@@ -122,8 +122,10 @@ public:
 };
 
 // GF(p^2): the field of order p^2, p % 4 = 3
-// primroot must be a primitive root of order primroot_order which is a root of (0, 1).
-template<typename Zp, uint64_t primroot_order, uint64_t primroot_0, uint64_t primroot_1>
+// primroot must be a primitive root of order primroot_order and
+//  - the 4th root of unity must be (0, 1),
+//  - the 8th root of unity must be 2^{(q - 1)/2} * (1, 1), where p = 2^q - 1.
+ template<typename Zp, uint64_t primroot_order, uint64_t primroot_0, uint64_t primroot_1>
 class GFp2
 {
 private:
@@ -157,6 +159,20 @@ private:
 	GFp2 mulconj(const GFp2 & rhs) const { return GFp2(_s0 * rhs._s0 + _s1 * rhs._s1, _s1 * rhs._s0 - _s0 * rhs._s1); }
 	GFp2 mul_neg0(const GFp2 & rhs) const { return GFp2(_s1 * rhs._s1 - _s0 * rhs._s0, _s1 * rhs._s0 + _s0 * rhs._s1); }
 
+	// * sqrt(2)/2 * (1 + i)
+	GFp2 mul_R8() const
+	{
+		const uint8_t log2_sqrt2_2 = uint8_t((Zp::get_q() - 1) / 2);
+		return GFp2((_s0 - _s1).lshift(log2_sqrt2_2), (_s1 + _s0).lshift(log2_sqrt2_2));
+	}
+
+	// * sqrt(2)/2 * (1 - i)
+	GFp2 mul_R8conj() const
+	{
+		const uint8_t log2_sqrt2_2 = uint8_t((Zp::get_q() - 1) / 2);
+		return GFp2((_s0 + _s1).lshift(log2_sqrt2_2), (_s1 - _s0).lshift(log2_sqrt2_2));
+	}
+
 	// Radix-2 DIF butterfly
 	static void fwd2(Zp * const x0, Zp * const x1, const GFp2 & w, const size_t step)
 	{
@@ -188,117 +204,199 @@ private:
 		const GFp2 z0 = GFp2(x0[0], x0[step]), z1 = GFp2(x1[0], x1[step]).mulconj(w2), z2 = GFp2(x2[0], x2[step]).mulconj(w1), z3 = GFp2(x3[0], x3[step]).mulconj(w3);
 		const GFp2 u0 = z0 + z1, u1 = z0 - z1, u2 = z2 + z3, u3 = z2 - z3;
 		const GFp2 v0 = u0 + u2, v2 = u0 - u2, v1 = u1.subi(u3), v3 = u1.addi(u3);
-		v0.store(x0[0], x0[step]); v2.store(x2[0], x2[step]); v1.store(x1[0], x1[step]); v3.store(x3[0], x3[step]);
+		v0.store(x0[0], x0[step]); v1.store(x1[0], x1[step]); v2.store(x2[0], x2[step]); v3.store(x3[0], x3[step]);
 	}
 
-	// Radix-2 DIF, one iteration
+	// Radix-2 butterfly, last DIF stage or first DIT stage
+	static void bty2_0(Zp * const x0, Zp * const x1, const size_t step)
+	{
+		const GFp2 z0 = GFp2(x0[0], x0[step]), z1 = GFp2(x1[0], x1[step]);
+		const GFp2 u0 = z0 + z1, u1 = z0 - z1;
+		u0.store(x0[0], x0[step]); u1.store(x1[0], x1[step]);
+	}
+
+	// Radix-4 DIF butterfly, last stage
+	static void fwd4_0(Zp * const x0, Zp * const x1, Zp * const x2, Zp * const x3, const size_t step)
+	{
+		const GFp2 z0 = GFp2(x0[0], x0[step]), z1 = GFp2(x1[0], x1[step]), z2 = GFp2(x2[0], x2[step]), z3 = GFp2(x3[0], x3[step]);
+		const GFp2 u0 = z0 + z2, u2 = z0 - z2, u1 = z1 + z3, u3 = z1 - z3;
+		const GFp2 v0 = u0 + u1, v1 = u0 - u1, v2 = u2.addi(u3), v3 = u2.subi(u3);
+		v0.store(x0[0], x0[step]); v1.store(x1[0], x1[step]); v2.store(x2[0], x2[step]); v3.store(x3[0], x3[step]);
+	}
+
+	// Radix-4 DIT butterfly, first stage
+	static void bck4_0(Zp * const x0, Zp * const x1, Zp * const x2, Zp * const x3, const size_t step)
+	{
+		const GFp2 z0 = GFp2(x0[0], x0[step]), z1 = GFp2(x1[0], x1[step]), z2 = GFp2(x2[0], x2[step]), z3 = GFp2(x3[0], x3[step]);
+		const GFp2 u0 = z0 + z1, u1 = z0 - z1, u2 = z2 + z3, u3 = z2 - z3;
+		const GFp2 v0 = u0 + u2, v2 = u0 - u2, v1 = u1.subi(u3), v3 = u1.addi(u3);
+		v0.store(x0[0], x0[step]); v1.store(x1[0], x1[step]); v2.store(x2[0], x2[step]); v3.store(x3[0], x3[step]);
+	}
+
+	// Radix-8 DIF butterfly, last stage
+	static void fwd8_0(Zp * const x0, Zp * const x1, Zp * const x2, Zp * const x3, Zp * const x4, Zp * const x5, Zp * const x6, Zp * const x7, const size_t step)
+	{
+		const GFp2 z0 = GFp2(x0[0], x0[step]), z1 = GFp2(x1[0], x1[step]), z2 = GFp2(x2[0], x2[step]), z3 = GFp2(x3[0], x3[step]);
+		const GFp2 z4 = GFp2(x4[0], x4[step]), z5 = GFp2(x5[0], x5[step]), z6 = GFp2(x6[0], x6[step]), z7 = GFp2(x7[0], x7[step]);
+
+		const GFp2 u0 = z0 + z4, u4 = z0 - z4, u2 = z2 + z6, u6 = z2 - z6;
+		const GFp2 u1 = z1 + z5, u5 = z1 - z5, u3 = z3 + z7, u7 = z3 - z7;
+
+		const GFp2 v0 = u0 + u2, v2 = u0 - u2, v4 = u4.addi(u6), v6 = u4.subi(u6);
+		const GFp2 v1 = u1 + u3, v3 = u1 - u3, v5 = u5.addi(u7).mul_R8(), v7 = u5.subi(u7).mul_R8();
+
+		const GFp2 t0 = v0 + v1, t1 = v0 - v1, t2 = v2.addi(v3), t3 = v2.subi(v3);
+		const GFp2 t4 = v4 + v5, t5 = v4 - v5, t6 = v6.addi(v7), t7 = v6.subi(v7);
+
+		t0.store(x0[0], x0[step]); t1.store(x1[0], x1[step]); t2.store(x2[0], x2[step]); t3.store(x3[0], x3[step]);
+		t4.store(x4[0], x4[step]); t5.store(x5[0], x5[step]); t6.store(x6[0], x6[step]); t7.store(x7[0], x7[step]);
+	}
+
+	// Radix-8 DIT butterfly, first stage
+	static void bck8_0(Zp * const x0, Zp * const x1, Zp * const x2, Zp * const x3, Zp * const x4, Zp * const x5, Zp * const x6, Zp * const x7, const size_t step)
+	{
+		const GFp2 z0 = GFp2(x0[0], x0[step]), z1 = GFp2(x1[0], x1[step]), z2 = GFp2(x2[0], x2[step]), z3 = GFp2(x3[0], x3[step]);
+		const GFp2 z4 = GFp2(x4[0], x4[step]), z5 = GFp2(x5[0], x5[step]), z6 = GFp2(x6[0], x6[step]), z7 = GFp2(x7[0], x7[step]);
+
+		const GFp2 u0 = z0 + z1, u1 = z0 - z1, u2 = z2 + z3, u3 = z2 - z3;
+		const GFp2 u4 = z4 + z5, u5 = (z4 - z5).mul_R8conj(), u6 = z6 + z7, u7 = (z6 - z7).mul_R8conj();
+
+		const GFp2 v0 = u0 + u2, v2 = u0 - u2, v4 = u4 + u6, v6 = u4 - u6;
+		const GFp2 v1 = u1.subi(u3), v3 = u1.addi(u3), v5 = u5.subi(u7), v7 = u5.addi(u7);
+
+		const GFp2 t0 = v0 + v4, t4 = v0 - v4, t2 = v2.subi(v6), t6 = v2.addi(v6);
+		const GFp2 t1 = v1 + v5, t5 = v1 - v5, t3 = v3.subi(v7), t7 = v3.addi(v7);
+
+		t0.store(x0[0], x0[step]); t1.store(x1[0], x1[step]); t2.store(x2[0], x2[step]); t3.store(x3[0], x3[step]);
+		t4.store(x4[0], x4[step]); t5.store(x5[0], x5[step]); t6.store(x6[0], x6[step]); t7.store(x7[0], x7[step]);
+	}
+
+	// Radix-2 DIF, one iteration; if L = 3 then each point is a vector of three GFp2
+	template<size_t L>
 	static void forward2(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
 			for (size_t i = 0; i < m; ++i)
 			{
-				const size_t k = 4 * m * j + 2 * i;
-				fwd2(&x[k + 0 * m], &x[k + 2 * m], w[i * s], 1);
+				const size_t i_l = (L == 3) ? div3(uint32_t(i)) : i, l = (L == 3) ? 3 * i_l + i : 2 * i;
+				const size_t k = 4 * m * j + l;
+				fwd2(&x[k + 0 * m], &x[k + 2 * m], w[i_l * s], L);
 			}
 		}
 	}
 
-	// Radix-2 DIT, one iteration
+	// Radix-2 DIT, one iteration; if L = 3 then each point is a vector of three GFp2
+	template<size_t L>
 	static void backward2(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
 			for (size_t i = 0; i < m; ++i)
 			{
-				const size_t k = 4 * m * j + 2 * i;
-				bck2(&x[k + 0 * m], &x[k + 2 * m], w[i * s], 1);
+				const size_t i_l = (L == 3) ? div3(uint32_t(i)) : i, l = (L == 3) ? 3 * i_l + i : 2 * i;
+				const size_t k = 4 * m * j + l;
+				bck2(&x[k + 0 * m], &x[k + 2 * m], w[i_l * s], L);
 			}
 		}
 	}
 
-	// Radix-4 DIF, one iteration
+	// Radix-4 DIF, one iteration; if L = 3 then each point is a vector of three GFp2
+	template<size_t L>
 	static void forward4(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
 			for (size_t i = 0; i < m; ++i)
 			{
-				const size_t k = 8 * m * j + 2 * i;
-				fwd4(&x[k + 0 * m], &x[k + 2 * m], &x[k + 4 * m], &x[k + 6 * m], w[i * s], w[2 * i * s], w[3 * i * s], 1);
+				const size_t i_l = (L == 3) ? div3(uint32_t(i)) : i, l = (L == 3) ? 3 * i_l + i : 2 * i;
+				const size_t k = 8 * m * j + l;
+				fwd4(&x[k + 0 * m], &x[k + 2 * m], &x[k + 4 * m], &x[k + 6 * m], w[1 * i_l * s], w[2 * i_l * s], w[3 * i_l * s], L);
 			}
 		}
 	}
 
-	// Radix-4 DIT, one iteration
+	// Radix-4 DIT, one iteration; if L = 3 then each point is a vector of three GFp2
+	template<size_t L>
 	static void backward4(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
 			for (size_t i = 0; i < m; ++i)
 			{
-				const size_t k = 8 * m * j + 2 * i;
-				bck4(&x[k + 0 * m], &x[k + 2 * m], &x[k + 4 * m], &x[k + 6 * m], w[i * s], w[2 * i * s], w[3 * i * s], 1);
+				const size_t i_l = (L == 3) ? div3(uint32_t(i)) : i, l = (L == 3) ? 3 * i_l + i : 2 * i;
+				const size_t k = 8 * m * j + l;
+				bck4(&x[k + 0 * m], &x[k + 2 * m], &x[k + 4 * m], &x[k + 6 * m], w[1 * i_l * s], w[2 * i_l * s], w[3 * i_l * s], L);
 			}
 		}
 	}
 
-	// Radix-2 DIF, one iteration, each point is a vector of three GFp2
-	static void forward2_3(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
+	// Radix-2, one iteration, last DIF stage or first DIT stage
+	template<size_t L>
+	static void butterfly2_0(Zp * const x, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
-			for (size_t i = 0; i < m; ++i)
+			for (size_t i = 0; i < L; ++i)
 			{
-				const size_t i_3 = div3(uint32_t(i));
-				const size_t k = 4 * m * j + 3 * i_3 + i;
-				fwd2(&x[k + 0 * m], &x[k + 2 * m], w[i_3 * s], 3);
+				bty2_0(&x[(4 * j + 0) * L + i], &x[(4 * j + 2) * L + i], L);
 			}
 		}
 	}
 
-	// Radix-2 DIT, one iteration, each point is a vector of three GFp2
-	static void backward2_3(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
+	// Radix-4 DIF, one iteration, last stage
+	template<size_t L>
+	static void forward4_0(Zp * const x, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
-			for (size_t i = 0; i < m; ++i)
+			for (size_t i = 0; i < L; ++i)
 			{
-				const size_t i_3 = div3(uint32_t(i));
-				const size_t k = 4 * m * j + 3 * i_3 + i;
-				bck2(&x[k + 0 * m], &x[k + 2 * m], w[i_3 * s], 3);
+				fwd4_0(&x[(8 * j + 0) * L + i], &x[(8 * j + 2) * L + i], &x[(8 * j + 4) * L + i], &x[(8 * j + 6) * L + i], L);
 			}
 		}
 	}
 
-	// Radix-4 DIF, one iteration, each point is a vector of three GFp2
-	static void forward4_3(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
+	// Radix-4 DIT, one iteration, first stage
+	template<size_t L>
+	static void backward4_0(Zp * const x, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
-			for (size_t i = 0; i < m; ++i)
+			for (size_t i = 0; i < L; ++i)
 			{
-				const size_t i_3 = div3(uint32_t(i));
-				const size_t k = 8 * m * j + 3 * i_3 + i;
-				fwd4(&x[k + 0 * m], &x[k + 2 * m], &x[k + 4 * m], &x[k + 6 * m], w[i_3 * s], w[2 * i_3 * s], w[3 * i_3 * s], 3);
+				bck4_0(&x[(8 * j + 0) * L + i], &x[(8 * j + 2) * L + i], &x[(8 * j + 4) * L + i], &x[(8 * j + 6) * L + i], L);
 			}
 		}
 	}
 
-	// Radix-4 DIT, one iteration, each point is a vector of three GFp2
-	static void backward4_3(Zp * const x, const GFp2 * const w, const size_t m, const size_t s)
+	// Radix-8 DIF, one iteration, last stage
+	template<size_t L>
+	static void forward8_0(Zp * const x, const size_t s)
 	{
 		for (size_t j = 0; j < s; ++j)
 		{
-			for (size_t i = 0; i < m; ++i)
+			for (size_t i = 0; i < L; ++i)
 			{
-				const size_t i_3 = div3(uint32_t(i));
-				const size_t k = 8 * m * j + 3 * i_3 + i;
-				bck4(&x[k + 0 * m], &x[k + 2 * m], &x[k + 4 * m], &x[k + 6 * m], w[i_3 * s], w[2 * i_3 * s], w[3 * i_3 * s], 3);
+				fwd8_0(&x[(16 * j + 0) * L + i], &x[(16 * j +  2) * L + i], &x[(16 * j +  4) * L + i], &x[(16 * j +  6) * L + i],
+					   &x[(16 * j + 8) * L + i], &x[(16 * j + 10) * L + i], &x[(16 * j + 12) * L + i], &x[(16 * j + 14) * L + i], L);
 			}
 		}
 	}
 
+	// Radix-8 DIT, one iteration, first stage
+	template<size_t L>
+	static void backward8_0(Zp * const x, const size_t s)
+	{
+		for (size_t j = 0; j < s; ++j)
+		{
+			for (size_t i = 0; i < L; ++i)
+			{
+				bck8_0(&x[(16 * j + 0) * L + i], &x[(16 * j +  2) * L + i], &x[(16 * j +  4) * L + i], &x[(16 * j +  6) * L + i],
+					   &x[(16 * j + 8) * L + i], &x[(16 * j + 10) * L + i], &x[(16 * j + 12) * L + i], &x[(16 * j + 14) * L + i], L);
+			}
+		}
+	}
 
 	// Weighted convolution of three numbers
 	static void weighted_sqr3(GFp2 z[3], const GFp2 & w, const GFp2 & wi)
@@ -328,7 +426,7 @@ private:
 	// See Henrik V. Sorensen, Douglas L. Jones, Michael T. Heideman, C. Sidney Burrus, "Real-Valued Fast Fourier Transform Algorithms",
 	// in IEEE Transactions on Acoustics, Speech, and Signal Processing, vol. 35, no. 6, pp. 849-863, June 1987.
 	// Output is recombined to produce the half-length transform (full length is not needed because of Hermitian symmetry).
-	static void sqr(Zp * const x, const GFp2 * const w, const size_t n)
+	static void sqr2(Zp * const x, const GFp2 * const w, const size_t n)
 	{
 		// First point: z[0] = z[-0] and w[0] = 1
 		const Zp u0 = x[0] + x[0], u1 = x[1] + x[1];
@@ -422,37 +520,45 @@ public:
 
 	static void square_2(Zp * const x, const GFp2 * const w, const size_t n)
 	{
-		// for (size_t m = n / 2, s = 1; m >= 2; m /= 2, s *= 2) forward2(x, w, m / 2, s);
-		size_t m = n / 2, s = 1; for (; m >= 4; m /= 4, s *= 4) forward4(x, w, m / 4, s);
-		if (m == 2) forward2(x, w, 1, n / 4);
+		// for (size_t m = n / 2, s = 1; m >= 2; m /= 2, s *= 2) forward2<1>(x, w, m / 2, s);
+		size_t m = n / 2, s = 1; for (; m > 8; m /= 4, s *= 4) forward4<1>(x, w, m / 4, s);
+		if (m == 8) forward8_0<1>(x, n / 16);
+		else if (m == 4) forward4_0<1>(x, n / 8);
+		else if (m == 2) butterfly2_0<1>(x, n / 4);
 
-		sqr(x, &w[n / 2], n);
+		sqr2(x, &w[n / 2], n);
 
-		// for (size_t m = 2, s = n / 4; s >= 1; m *= 2, s /= 2) backward2(x, w, m / 2, s);
-		if (m == 2) backward2(x, w, 1, n / 4);
-		m *= 4; s /= 4; for (; s >= 1; m *= 4, s /= 4) backward4(x, w, m / 4, s);
+		// for (size_t m = 2, s = n / 4; s >= 1; m *= 2, s /= 2) backward2<1>(x, w, m / 2, s);
+		if (m == 8) backward8_0<1>(x, n / 16);
+		else if (m == 4) backward4_0<1>(x, n / 8);
+		else if (m == 2) butterfly2_0<1>(x, n / 4);
+		m *= 4; s /= 4; for (; s >= 1; m *= 4, s /= 4) backward4<1>(x, w, m / 4, s);
 
 	}
 
 	static void square_3(Zp * const x, const GFp2 * const w, const size_t n)
 	{
-		// for (size_t m = n / 2, s = 1; m >= 6; m /= 2, s *= 2) forward2_3(x, w, m / 2, s);
-		size_t m = n / 2, s = 1; for (; m >= 12; m /= 4, s *= 4) forward4_3(x, w, m / 4, s);
-		if (m == 6) forward2_3(x, w, 3, n / 12);
+		// for (size_t m = n / 2, s = 1; m >= 6; m /= 2, s *= 2) forward2<3>(x, w, m / 2, s);
+		size_t m = n / 2, s = 1; for (; m > 24; m /= 4, s *= 4) forward4<3>(x, w, m / 4, s);
+		if (m == 24) forward8_0<3>(x, n / 48);
+		else if (m == 12) forward4_0<3>(x, n / 24);
+		else if (m == 6) butterfly2_0<3>(x, n / 12);
 
 		sqr3(x, &w[n / 6], n);
 
-		// for (size_t m = 6, s = n / 12; s >= 1; m *= 2, s /= 2) backward2_3(x, w, m / 2, s);
-		if (m == 6) backward2_3(x, w, 3, n / 12);
-		m *= 4; s /= 4; for (; s >= 1; m *= 4, s /= 4) backward4_3(x, w, m / 4, s);
+		// for (size_t m = 6, s = n / 12; s >= 1; m *= 2, s /= 2) backward2<3>(x, w, m / 2, s);
+		if (m == 24) backward8_0<3>(x, n / 48);
+		else if (m == 12) backward4_0<3>(x, n / 24);
+		else if (m == 6) butterfly2_0<3>(x, n / 12);
+		m *= 4; s /= 4; for (; s >= 1; m *= 4, s /= 4) backward4<3>(x, w, m / 4, s);
 	}
 };
 
 using Z61 = ZMq<61, 37, uint64_t(3) << 54, uint64_t, __uint128_t>;
 using Z31 = ZMq<31, 7, uint64_t(33) << 54, uint32_t, uint64_t>;
 
-using GF61 = GFp2<Z61, uint64_t(3) << 62, 1794883824738941ull, 7671273768663199ull>;
-using GF31 = GFp2<Z31, uint64_t(3) << 32, 698590u, 9209u>;
+using GF61 = GFp2<Z61, uint64_t(9) << 30, 498212544045757ull, 3337356182474291ull>;
+using GF31 = GFp2<Z31, uint64_t(9) << 30, 690004u, 2724878u>;
 
 class mersenne
 {
@@ -488,8 +594,6 @@ private:
 		// 2 * (w + 1) + log2(n) <= 90 < 91.99999999932 - 1.5849625
 		} while (2 * (w + 1) + log2_n3 > 90);
 
-		// return size_t(1) << log2_n;
-		// return size_t(3) << log2_n3;
 		return std::min(size_t(1) << log2_n, size_t(3) << log2_n3);
 	}
 
