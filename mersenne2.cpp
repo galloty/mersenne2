@@ -133,6 +133,7 @@ private:
 public:
 	GFp2() {}
 	explicit GFp2(const Zp & s0, const Zp & s1) : _s0(s0), _s1(s1) {}
+	explicit GFp2(const uint64_t n0, const uint64_t n1 = 0) : _s0(n0), _s1(n1) {}
 
 	void store(Zp & s0, Zp & s1) const { s0 = _s0; s1 = _s1; }
 
@@ -501,10 +502,12 @@ private:
 	}
 
 public:
+	GFp2 & operator*=(const GFp2 & rhs) { *this = mul(rhs); return *this; }
+
 	GFp2 pow(const uint64_t e) const
 	{
-		if (e == 0) return GFp2(Zp(1), Zp(0));
-		GFp2 r = GFp2(Zp(1), Zp(0)), y = *this;
+		if (e == 0) return GFp2(1);
+		GFp2 r = GFp2(1), y = *this;
 		for (uint64_t i = e; i != 1; i /= 2) { if (i % 2 != 0) r = r.mul(y); y = y.sqr(); }
 		return r.mul(y);
 	}
@@ -515,7 +518,7 @@ public:
 		return conj() * (_s0.sqr() + _s1.sqr()).invert();
 	}
 
-	static const GFp2 root_nth(const size_t n) { return GFp2(Zp(primroot_0), Zp(primroot_1)).pow(primroot_order / n); }
+	static const GFp2 root_nth(const size_t n) { return GFp2(primroot_0, primroot_1).pow(primroot_order / n); }
 
 	static void square_2(Zp * const x, const GFp2 * const w, const size_t n)
 	{
@@ -664,26 +667,28 @@ private:
 		// Radix-2
 		const size_t n3 = (n % 3 != 0) ? n : n / 3;
 		const GF r = GF::root_nth(n3 / 2);
-		for (size_t j = 0; j < n3 / 2; ++j) w[j] = r.pow(j);
+		GF w_j = GF(1); w[0] = w_j; for (size_t j = 1; j < n3 / 2; ++j) { w_j *= r; w[j] = w_j; }
 
 		// Hermitian product
 		GF * const wh = &w[n3 / 2];
 		if (n % 3 != 0)	// n = 2^m
 		{
 			const GF r_n_2 = GF::root_nth(n / 2);
-			for (size_t j = 0; j < n / 4; ++j) wh[j] = r_n_2.pow(bitrev(j, n / 4));
+			GF wh_j = GF(1); wh[0] = wh_j; for (size_t j = 1; j < n / 4; ++j) { wh_j *= r_n_2; wh[bitrev(j, n / 4)] = wh_j; }
 		}
 		else			// n = 3 * 2^m
 		{
-			const GF r_n = GF::root_nth(n), r_n_3 = GF::root_nth(n / 3);
-			for (size_t j = 0; j < n / 12; ++j)
+			const GF r_n = GF::root_nth(n), r_ni = r_n.invert(), r_n_3 = GF::root_nth(n / 3);
+			GF wh0_j = GF(1), wh1_j = GF(1), wh2_j = GF(1), wh3_j = r_n.pow(n / 6), wh4_j = r_ni.pow(n / 6);
+			wh[0] = wh0_j; wh[1] = wh1_j; wh[2] = wh2_j; wh[3] = wh3_j; wh[4] = wh4_j;
+			for (size_t j = 1; j < n / 12; ++j)
 			{
 				const size_t jr = bitrev(j, n / 12);
-				wh[5 * j + 0] = r_n_3.pow(bitrev(j, n / 12));	// Four step factor
-				const GF rj = r_n.pow(jr);
-				wh[5 * j + 1] = rj; wh[5 * j + 2] = rj.invert();
-				const GF rjp = r_n.pow(n / 6 - jr);
-				wh[5 * j + 3] = rjp; wh[5 * j + 4] = rjp.invert();
+				wh0_j *= r_n_3; wh[5 * jr + 0] = wh0_j;	// Four step factor
+				wh1_j *= r_n;   wh[5 * jr + 1] = wh1_j;
+				wh2_j *= r_ni;  wh[5 * jr + 2] = wh2_j;
+				wh3_j *= r_ni;  wh[5 * jr + 3] = wh3_j;
+				wh4_j *= r_n;   wh[5 * jr + 4] = wh4_j;
 			}
 		}
 	}
