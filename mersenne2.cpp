@@ -121,10 +121,9 @@ public:
 	}
 };
 
-// GF(p^2): the field of order p^2, p % 4 = 3
+// GF(p^2): the field of order p^2, where p = 2^q - 1
 // primroot must be a primitive root of order primroot_order and
-//  - the 4th root of unity must be (0, 1),
-//  - the 8th root of unity must be 2^{(q - 1)/2} * (1, 1), where p = 2^q - 1.
+// such that primroot^{order/8) = 2^{(q - 1)/2} * (1, 1).
 template<typename Zp, uint64_t primroot_order, uint64_t primroot_0, uint64_t primroot_1>
 class GFp2
 {
@@ -533,7 +532,6 @@ public:
 		else if (m == 4) backward4_0<1>(x, n / 8);
 		else if (m == 2) butterfly2_0<1>(x, n / 4);
 		m *= 4; s /= 4; for (; s >= 1; m *= 4, s /= 4) backward4<1>(x, w, m / 4, s);
-
 	}
 
 	static void square_3(Zp * const x, const GFp2 * const w, const size_t n)
@@ -557,8 +555,8 @@ public:
 using Z61 = ZMq<61, 37, uint64_t(3) << 54, uint64_t, __uint128_t>;
 using Z31 = ZMq<31, 7, uint64_t(33) << 54, uint32_t, uint64_t>;
 
-using GF61 = GFp2<Z61, uint64_t(9) << 30, 498212544045757ull, 3337356182474291ull>;
-using GF31 = GFp2<Z31, uint64_t(9) << 30, 690004u, 2724878u>;
+using GF61 = GFp2<Z61, uint64_t(9) << 30, 1113493589730879ull, 13373620725916ull>;
+using GF31 = GFp2<Z31, uint64_t(9) << 30, 361113u, 1180224u>;
 
 class mersenne
 {
@@ -582,7 +580,7 @@ private:
 			++log2_n;
 			// digit-width is w or w + 1
 			w = q >> log2_n;
-		// the condition is n * (2^{w + 1} - 1)^2 < (2^61 - 1)*(2^31 - 1))
+		// the condition is n * (2^{w + 1} - 1)^2 < (2^61 - 1)*(2^31 - 1)
 		// 2 * (w + 1) + log2(n) <= 91 < 91.99999999932
 		} while (2 * (w + 1) + log2_n > 91);
 
@@ -590,7 +588,7 @@ private:
 		{
 			++log2_n3;
 			w = q / (3u << log2_n3);
-		// The condition is 3 * n * (2^{w + 1} - 1)^2 < (2^61 - 1)*(2^31 - 1))
+		// The condition is 3 * n * (2^{w + 1} - 1)^2 < (2^61 - 1)*(2^31 - 1)
 		// 2 * (w + 1) + log2(n) <= 90 < 91.99999999932 - 1.5849625
 		} while (2 * (w + 1) + log2_n3 > 90);
 
