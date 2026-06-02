@@ -558,8 +558,8 @@ public:
 using Z61 = ZMq<61, 37, uint64_t(3) << 54, uint64_t, __uint128_t>;
 using Z31 = ZMq<31, 7, uint64_t(33) << 54, uint32_t, uint64_t>;
 
-using GF61 = GFp2<Z61, uint64_t(9) << 30, 1113493589730879ull, 13373620725916ull>;
-using GF31 = GFp2<Z31, uint64_t(9) << 30, 361113u, 1180224u>;
+using GF61 = GFp2<Z61, uint64_t(9) << 30, 10401546748453ull, 75407251480756ull>;
+using GF31 = GFp2<Z31, uint64_t(9) << 30, 19817u, 64895u>;
 
 class mersenne
 {
