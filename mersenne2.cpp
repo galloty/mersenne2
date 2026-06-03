@@ -119,6 +119,11 @@ public:
 			for (size_t k = 0; k < n; ++k) x[k] = x[k].rshift(w_ib[k] + ln) * inv6;
 		}
 	}
+
+	static void init(ZMq * const x, const size_t n, const uint32_t a)
+	{
+		x[0] = ZMq(a); for (size_t k = 1; k < n; ++k) x[k] = ZMq(0);
+	}
 };
 
 // GF(p^2): the field of order p^2, where p = 2^q - 1
@@ -130,12 +135,12 @@ class GFp2
 private:
 	Zp _s0, _s1;
 
+	explicit GFp2(const uint64_t n0, const uint64_t n1 = 0) : _s0(n0), _s1(n1) {}
+	void store(Zp & s0, Zp & s1) const { s0 = _s0; s1 = _s1; }
+
 public:
 	GFp2() {}
 	explicit GFp2(const Zp & s0, const Zp & s1) : _s0(s0), _s1(s1) {}
-	explicit GFp2(const uint64_t n0, const uint64_t n1 = 0) : _s0(n0), _s1(n1) {}
-
-	void store(Zp & s0, Zp & s1) const { s0 = _s0; s1 = _s1; }
 
 private:
 	GFp2 conj() const { return GFp2(_s0, _s1.neg()); }
@@ -153,6 +158,7 @@ private:
 	GFp2 subi_conj(const GFp2 & rhs) const { return GFp2(_s0 + rhs._s1, rhs._s0 - _s1); }
 
 	GFp2 operator*(const Zp & rhs) const { return GFp2(_s0 * rhs, _s1 * rhs); }
+	GFp2 & operator*=(const GFp2 & rhs) { *this = mul(rhs); return *this; }
 
 	GFp2 sqr() const { const Zp t = _s0 * _s1; return GFp2(_s0.sqr() - _s1.sqr(), t + t); }
 	GFp2 mul(const GFp2 & rhs) const { return GFp2(_s0 * rhs._s0 - _s1 * rhs._s1, _s1 * rhs._s0 + _s0 * rhs._s1); }
@@ -171,6 +177,30 @@ private:
 	{
 		const uint8_t log2_sqrt2_2 = uint8_t((Zp::get_q() - 1) / 2);
 		return GFp2((_s0 + _s1).lshift(log2_sqrt2_2), (_s1 - _s0).lshift(log2_sqrt2_2));
+	}
+
+	GFp2 pow(const uint64_t e) const
+	{
+		if (e == 0) return GFp2(1);
+		GFp2 r = GFp2(1), y = *this;
+		for (uint64_t i = e; i != 1; i /= 2) { if (i % 2 != 0) r = r.mul(y); y = y.sqr(); }
+		return r.mul(y);
+	}
+
+	GFp2 invert() const
+	{
+		// 1 / (s0 + i * s1) = (s0 - i * s1) / (s0^2 + s1^2)
+		return conj() * (_s0.sqr() + _s1.sqr()).invert();
+	}
+
+	static const GFp2 root_nth(const size_t n) { return GFp2(primroot_0, primroot_1).pow(primroot_order / n); }
+
+	// Bit-reversal permutation of index i for a sequence of n items
+	static constexpr size_t bitrev(const size_t i, const size_t n)
+	{
+		size_t r = 0;
+		for (size_t k = n, j = i; k > 1; k /= 2, j /= 2) r = (2 * r) | (j % 2);
+		return r;
 	}
 
 	// Radix-2 DIF butterfly
@@ -502,23 +532,36 @@ private:
 	}
 
 public:
-	GFp2 & operator*=(const GFp2 & rhs) { *this = mul(rhs); return *this; }
-
-	GFp2 pow(const uint64_t e) const
+	static void init_twiddle_factors(GFp2 * const w, const size_t n)
 	{
-		if (e == 0) return GFp2(1);
-		GFp2 r = GFp2(1), y = *this;
-		for (uint64_t i = e; i != 1; i /= 2) { if (i % 2 != 0) r = r.mul(y); y = y.sqr(); }
-		return r.mul(y);
-	}
+		// Radix-2
+		const size_t n3 = (n % 3 != 0) ? n : n / 3;
+		const GFp2 r = root_nth(n3 / 2);
+		GFp2 w_j = GFp2(1); w[0] = w_j; for (size_t j = 1; j < n3 / 2; ++j) { w_j *= r; w[j] = w_j; }
 
-	GFp2 invert() const
-	{
-		// 1 / (s0 + i * s1) = (s0 - i * s1) / (s0^2 + s1^2)
-		return conj() * (_s0.sqr() + _s1.sqr()).invert();
+		// Hermitian product
+		GFp2 * const wh = &w[n3 / 2];
+		if (n % 3 != 0)	// n = 2^m
+		{
+			const GFp2 r_n_2 = root_nth(n / 2);
+			GFp2 wh_j = GFp2(1); wh[0] = wh_j; for (size_t j = 1; j < n / 4; ++j) { wh_j *= r_n_2; wh[bitrev(j, n / 4)] = wh_j; }
+		}
+		else			// n = 3 * 2^m
+		{
+			const GFp2 r_n = root_nth(n), r_ni = r_n.invert(), r_n_3 = root_nth(n / 3);
+			GFp2 wh0_j = GFp2(1), wh1_j = GFp2(1), wh2_j = GFp2(1), wh3_j = r_n.pow(n / 6), wh4_j = r_ni.pow(n / 6);
+			wh[0] = wh0_j; wh[1] = wh1_j; wh[2] = wh2_j; wh[3] = wh3_j; wh[4] = wh4_j;
+			for (size_t j = 1; j < n / 12; ++j)
+			{
+				const size_t jr = bitrev(j, n / 12);
+				wh0_j *= r_n_3; wh[5 * jr + 0] = wh0_j;	// Four step factor
+				wh1_j *= r_n;   wh[5 * jr + 1] = wh1_j;
+				wh2_j *= r_ni;  wh[5 * jr + 2] = wh2_j;
+				wh3_j *= r_ni;  wh[5 * jr + 3] = wh3_j;
+				wh4_j *= r_n;   wh[5 * jr + 4] = wh4_j;
+			}
+		}
 	}
-
-	static const GFp2 root_nth(const size_t n) { return GFp2(primroot_0, primroot_1).pow(primroot_order / n); }
 
 	static void square_2(Zp * const x, const GFp2 * const w, const size_t n)
 	{
@@ -653,46 +696,6 @@ private:
 		}
 	}
 
-	// Bit-reversal permutation of index i for a sequence of n items
-	static constexpr size_t bitrev(const size_t i, const size_t n)
-	{
-		size_t r = 0;
-		for (size_t k = n, j = i; k > 1; k /= 2, j /= 2) r = (2 * r) | (j % 2);
-		return r;
-	}
-
-	template<typename GF>
-	static void init_twiddle_factors(GF * const w, const size_t n)
-	{
-		// Radix-2
-		const size_t n3 = (n % 3 != 0) ? n : n / 3;
-		const GF r = GF::root_nth(n3 / 2);
-		GF w_j = GF(1); w[0] = w_j; for (size_t j = 1; j < n3 / 2; ++j) { w_j *= r; w[j] = w_j; }
-
-		// Hermitian product
-		GF * const wh = &w[n3 / 2];
-		if (n % 3 != 0)	// n = 2^m
-		{
-			const GF r_n_2 = GF::root_nth(n / 2);
-			GF wh_j = GF(1); wh[0] = wh_j; for (size_t j = 1; j < n / 4; ++j) { wh_j *= r_n_2; wh[bitrev(j, n / 4)] = wh_j; }
-		}
-		else			// n = 3 * 2^m
-		{
-			const GF r_n = GF::root_nth(n), r_ni = r_n.invert(), r_n_3 = GF::root_nth(n / 3);
-			GF wh0_j = GF(1), wh1_j = GF(1), wh2_j = GF(1), wh3_j = r_n.pow(n / 6), wh4_j = r_ni.pow(n / 6);
-			wh[0] = wh0_j; wh[1] = wh1_j; wh[2] = wh2_j; wh[3] = wh3_j; wh[4] = wh4_j;
-			for (size_t j = 1; j < n / 12; ++j)
-			{
-				const size_t jr = bitrev(j, n / 12);
-				wh0_j *= r_n_3; wh[5 * jr + 0] = wh0_j;	// Four step factor
-				wh1_j *= r_n;   wh[5 * jr + 1] = wh1_j;
-				wh2_j *= r_ni;  wh[5 * jr + 2] = wh2_j;
-				wh3_j *= r_ni;  wh[5 * jr + 3] = wh3_j;
-				wh4_j *= r_n;   wh[5 * jr + 4] = wh4_j;
-			}
-		}
-	}
-
 public:
 	mersenne(const uint32_t q) : _n(transform_size(q)),
 		_x61(new Z61[_n]), _x31(new Z31[_n]), _w61(new GF61[_n]), _w31(new GF31[_n]),
@@ -700,8 +703,8 @@ public:
 	{
 		const size_t n = _n;
 
-		init_twiddle_factors<GF61>(_w61, n);
-		init_twiddle_factors<GF31>(_w31, n);
+		GF61::init_twiddle_factors(_w61, n);
+		GF31::init_twiddle_factors(_w31, n);
 
 		// IBDWT weights: x^q - 1 => x^n - 1
 		// See Richard Crandall, Barry Fagin, "Discrete weighted transforms and large-integer arithmetic", Math. Comp. 62 (1994), 305-324.
@@ -758,12 +761,10 @@ public:
 
 	void init(const uint32_t a) const
 	{
-		Z61 * const x61 = _x61;
-		Z31 * const x31 = _x31;
 		const size_t n = _n;
 
-		x61[0] = Z61(a); for (size_t k = 1; k < n; ++k) x61[k] = Z61(0);
-		x31[0] = Z31(a); for (size_t k = 1; k < n; ++k) x31[k] = Z31(0);
+		Z61::init(_x61, n, a);
+		Z31::init(_x31, n, a);
 	}
 
 	void square() const
